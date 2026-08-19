@@ -57,7 +57,7 @@ module.exports = [
     ...common,
     name: "renderer",
     target: "web",
-    entry: "./src/renderer/renderer.ts",
+    entry: "./src/renderer/index.ts",
     output: {
       path: path.resolve(__dirname, "dist/renderer"),
       filename: "renderer.js",

@@ -89,7 +89,7 @@ src/
 └── renderer/              # UI (TypeScript, без фреймворков)
     ├── assets/            # статика: index.template.html, styles.css
     ├── core/              # общий код: types.ts, utils.ts
-    ├── renderer.ts        # точка входа (webpack)
+    ├── index.ts           # точка входа (webpack)
     ├── connect/           # экран подключения (index.ts, view.html)
     ├── dashboard/         # дашборд, события пульта, переключение вкладок (index.ts, view.html)
     └── tabs/              # вкладки — по одной на папку

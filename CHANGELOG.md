@@ -5,6 +5,12 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.12] — 2026-08-19
+
+### Изменено
+- Точка входа рендерера переименована `renderer.ts` → `index.ts` для
+  единообразия с модулями (`connect/`, `dashboard/`, `tabs/*/`).
+
 ## [1.0.11] — 2026-08-19
 
 ### Изменено
