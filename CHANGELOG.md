@@ -5,6 +5,16 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.4] — 2026-08-19
+
+### Изменено
+- Типы рендерера вынесены в отдельные файлы `types.ts` рядом с кодом:
+  `Els` и `RendererState` — в `src/renderer/types.ts`; типы вкладки Routing
+  (`EditRow`, `PatchInput`, `MergedInput`, `SavedSet`, `SavedRoutingEntry`) —
+  в `src/renderer/tabs/routing/types.ts`; типы вкладки Monitor (`OutputOption`,
+  `Dest`, `MixItem`) — в `src/renderer/tabs/monitor/types.ts`. Дубликат
+  `EditRow` во вкладке Routing объединён в один.
+
 ## [1.0.3] — 2026-08-19
 
 ### Изменено

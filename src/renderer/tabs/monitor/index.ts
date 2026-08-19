@@ -5,6 +5,7 @@
  */
 import { els, state } from "../../utils";
 import type { SnapshotInput } from "../../../shared/ipc";
+import type { OutputOption, Dest, MixItem } from "./types";
 
 // ── output selectors ─────────────────────────────────────────────────
 
@@ -12,8 +13,8 @@ import type { SnapshotInput } from "../../../shared/ipc";
  * Build the list of all available physical outputs from the model spec.
  * Returns array of {value, label} where value = "destType:channel".
  */
-function buildOutputOptions(): { value: string; label: string }[] {
-  const opts: { value: string; label: string }[] = [];
+function buildOutputOptions(): OutputOption[] {
+  const opts: OutputOption[] = [];
   const spec = state.modelSpec;
   // Local Out 1..N
   if (spec) {
@@ -78,7 +79,7 @@ function monEnabled(): boolean {
 }
 
 /** Parse an L/R destination selector value into {destType, destChannel}. */
-function parseDest(sel: HTMLSelectElement): { destType: number; destChannel: number } | null {
+function parseDest(sel: HTMLSelectElement): Dest | null {
   const val = sel.value;
   if (!val) return null;
   const [destTypeHex, chStr] = val.split(":");
@@ -88,7 +89,7 @@ function parseDest(sel: HTMLSelectElement): { destType: number; destChannel: num
 /** Route a source b3 to a physical output (output patch). */
 async function routeSourceToOutput(
   sourceB3: number | null,
-  dest: { destType: number; destChannel: number } | null
+  dest: Dest | null
 ): Promise<void> {
   if (sourceB3 === null || !dest) return;
   await window.sq.setOutputPatch(sourceB3, dest.destType, dest.destChannel);
@@ -188,7 +189,7 @@ async function onChannelClick(b3: number, btn: HTMLButtonElement): Promise<void>
 function buildMixButtons(): void {
   const container = els.mixButtons;
   container.innerHTML = "";
-  const items: { b3: number; label: string }[] = [];
+  const items: MixItem[] = [];
   for (let i = 0; i < 12; i++) items.push({ b3: 0x58 + i, label: `Mix ${i + 1}` });
 
   for (const item of items) {

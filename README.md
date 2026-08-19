@@ -89,14 +89,14 @@ src/
 └── renderer/              # UI (TypeScript, без фреймворков)
     ├── index.html
     ├── styles.css
-    ├── types.ts           # декларация window.sq
+    ├── types.ts           # типы рендерера (window.sq, Els, RendererState)
     ├── utils.ts           # DOM-элементы, состояние, хелперы
     ├── connect.ts         # экран подключения
     ├── dashboard.ts       # дашборд, подписки на события пульта
     ├── renderer.ts        # точка входа (webpack)
     └── tabs/              # вкладки — по одной на папку
-        ├── routing/       # вкладка «Роутинг»
-        ├── monitor/       # вкладка «Монитор»
+        ├── routing/       # вкладка «Роутинг» (types.ts рядом)
+        ├── monitor/       # вкладка «Монитор» (types.ts рядом)
         └── log/           # вкладка «Журнал»
 ```
 

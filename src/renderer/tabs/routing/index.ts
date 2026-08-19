@@ -6,24 +6,9 @@
 import { els, state, escapeHtml, flashTitle, todayStr } from "../../utils";
 import { buildChannelButtons } from "../monitor";
 import type { SnapshotInput, SnapshotPayload } from "../../../shared/ipc";
+import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";
 
 // ── stereo merge helpers ─────────────────────────────────────────────
-
-interface EditRow {
-  destB3: number;
-  destLabel: string;
-  name: string;
-  source: number;
-  sourceChannel: number;
-}
-
-/** Anything mergeStereoInputs can consume: live snapshots or edit-table rows. */
-type PatchInput = SnapshotInput | EditRow;
-
-interface MergedInput extends SnapshotInput {
-  _stereo?: boolean;
-  _rightSourceChannel?: number;
-}
 
 /** Set of b3 values that are the RIGHT side of a stereo pair (to be skipped). */
 function stereoRightSet(pairs: number[][]): Set<number> {
@@ -170,25 +155,6 @@ function populateStereoInputNumberSelect(
     selectEl.value = String(rounded);
   }
   selectEl.dataset.prev = selectEl.value;
-}
-
-interface EditRow {
-  destB3: number;
-  destLabel: string;
-  name: string;
-  source: number;
-  sourceChannel: number;
-}
-
-interface SavedSet {
-  inputs: EditRow[];
-  stereoPairs: number[][];
-}
-
-interface SavedRoutingEntry extends SavedSet {
-  name: string;
-  savedAt: string;
-  model?: string;
 }
 
 let editInputsBuilt = false;
