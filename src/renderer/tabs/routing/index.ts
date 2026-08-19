@@ -12,9 +12,9 @@ import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } fr
 
 /** Set of b3 values that are the RIGHT side of a stereo pair (to be skipped). */
 function stereoRightSet(pairs: number[][]): Set<number> {
-  const s = new Set<number>();
-  for (const [l, r] of pairs) s.add(r);
-  return s;
+  const set = new Set<number>();
+  for (const [left, right] of pairs) set.add(right);
+  return set;
 }
 
 /** Returns the stereo pair for a left b3, or null. */
@@ -475,11 +475,11 @@ async function confirmSaveRouting(): Promise<void> {
     els.saveNameInput.focus();
     return;
   }
-  let snap: SnapshotPayload | null = null;
+  let snapshot: SnapshotPayload | null = null;
   try {
-    snap = await window.sq.getSnapshot();
+    snapshot = await window.sq.getSnapshot();
   } catch {
-    snap = null;
+    snapshot = null;
   }
   const pairs = readEditStereoPairs();
   addSavedRouting({
@@ -489,7 +489,7 @@ async function confirmSaveRouting(): Promise<void> {
     inputs: readEditInputs(),
     // The saved routing carries the active list's own stereo layout; fall back
     // to the console config when the table is empty.
-    stereoPairs: pairs.length ? pairs : (snap ? snap.stereoPairs : []),
+    stereoPairs: pairs.length ? pairs : (snapshot ? snapshot.stereoPairs : []),
   });
   closeSaveModal();
   showSaveFeedback("Сохранено", "");
@@ -752,8 +752,8 @@ async function uploadInputPatching(): Promise<void> {
 async function downloadInputPatching(): Promise<void> {
   els.downloadBtn.disabled = true;
   try {
-    const snap = await window.sq.getSnapshot();
-    buildEditInputs(snap.inputs, snap.stereoPairs || []);
+    const snapshot = await window.sq.getSnapshot();
+    buildEditInputs(snapshot.inputs, snapshot.stereoPairs || []);
     // Download replaces the currently active INPUT PATCHING list.
     editSets[activeEditSet] = captureEditSet();
     showSaveFeedback("Загружено", "✓ ");
@@ -791,18 +791,18 @@ function mirrorScroll(srcWrap: HTMLElement, dstWrap: HTMLElement): void {
  * Apply a routing snapshot to the tab: update stereo pairs first (rebuilding
  * the monitor channel grid if they changed), then both tables.
  */
-export function onRoutingSnapshot(snap: SnapshotPayload): void {
+export function onRoutingSnapshot(snapshot: SnapshotPayload): void {
   // Update stereo pairs FIRST so table merging uses fresh data.
-  const pairsKey = JSON.stringify(snap.stereoPairs || []);
+  const pairsKey = JSON.stringify(snapshot.stereoPairs || []);
   if (pairsKey !== JSON.stringify(state.stereoPairs)) {
-    state.stereoPairs = snap.stereoPairs || [];
+    state.stereoPairs = snapshot.stereoPairs || [];
     buildChannelButtons();
     if (!editInputsFrozen) editInputsBuilt = false; // force rebuild of editable table
   }
-  renderInputs(snap.inputs);
+  renderInputs(snapshot.inputs);
   // After the initial burst the Input Patching table is frozen — later console
   // routing changes must not alter it (selectors stay active for editing).
-  syncEditInputs(snap.inputs, snap.stereoPairs);
+  syncEditInputs(snapshot.inputs, snapshot.stereoPairs);
 }
 
 /** Freeze the Input Patching snapshot after the initial state burst. */

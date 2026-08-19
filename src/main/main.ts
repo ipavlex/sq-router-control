@@ -421,12 +421,12 @@ class SQController {
     }
 
     for (const out of outputs) {
-      const rec = this.encodeOutputPatch(out);
-      if (!rec) {
+      const record = this.encodeOutputPatch(out);
+      if (!record) {
         skipped++;
         continue;
       }
-      this.sendPatchFrame(rec.ch, rec.modifier, rec.valLo, rec.valHi);
+      this.sendPatchFrame(record.ch, record.modifier, record.valLo, record.valHi);
       applied++;
     }
 
@@ -576,8 +576,8 @@ class SQController {
    * so the tables visibly populate in a burst, mirroring a real SQ handshake.
    */
   private startDemoInitialBurst(): void {
-    const gen = this.demoBurstGen;
-    const alive = (): boolean => this.demoMode && gen === this.demoBurstGen;
+    const generation = this.demoBurstGen;
+    const alive = (): boolean => this.demoMode && generation === this.demoBurstGen;
 
     const names: Record<number, string> = {
       // Local inputs (Ch1-16)
@@ -747,28 +747,28 @@ class SQController {
   demoRefresh(): RoutingSnapshot {
     if (!this.demoMode) return this.snapshot();
 
-    const gen = ++this.demoRefreshGen;
-    const variant = gen % DEMO_VARIANTS.length;
-    const cfg = DEMO_VARIANTS[variant];
+    const generation = ++this.demoRefreshGen;
+    const variant = generation % DEMO_VARIANTS.length;
+    const config = DEMO_VARIANTS[variant];
 
     this.model.reset();
     this.model.routingBlockBytes = 928;
 
     // Channel names.
-    for (const [b3, name] of Object.entries(cfg.names)) {
+    for (const [b3, name] of Object.entries(config.names)) {
       this.model.setChannelName(Number(b3), name.substring(0, 6));
     }
 
     // Stereo pairs.
-    this.model.stereoPairs = cfg.stereoPairs;
+    this.model.stereoPairs = config.stereoPairs;
 
     // Input patches.
-    for (const p of cfg.inputs) {
+    for (const p of config.inputs) {
       this.applyInputPatch(p.destB3, p.source, p.sourceChannel);
     }
 
     // Output patches.
-    for (const p of cfg.outputs) {
+    for (const p of config.outputs) {
       if (p.kind === "output") this.applyOutputPatch(p.sourceB3, p.dest, p.destChannel0);
       else if (p.kind === "fx") this.applyFxPatch(p.fxIndex, p.lr, p.dest, p.destChannel0);
       else this.applyMonitorPatch(p.source, p.dest, p.destChannel0);
@@ -857,15 +857,15 @@ class SQController {
     });
 
     conn.on("initialState", () => {
-      const fc = conn._frameCounters;
-      const snap = this.model.snapshot();
+      const frameCounters = conn._frameCounters;
+      const snapshot = this.model.snapshot();
       this.send("sq:log", {
         level: "frame",
-        msg: `Initial state burst complete. Frames: total=${fc.total} dsp=${fc.dsp} paramData=${fc.paramData} routingBlock=${fc.routingBlock} fullState=${fc.fullState} channelInfo=${fc.channelInfo}`,
+        msg: `Initial state burst complete. Frames: total=${frameCounters.total} dsp=${frameCounters.dsp} paramData=${frameCounters.paramData} routingBlock=${frameCounters.routingBlock} fullState=${frameCounters.fullState} channelInfo=${frameCounters.channelInfo}`,
       });
       this.send("sq:log", {
         level: "ok",
-        msg: `Routing decoded: ${snap.inputs.length} input patches, ${snap.outputs.length} output patches, ${snap.stereoPairs.length} stereo pairs.`,
+        msg: `Routing decoded: ${snapshot.inputs.length} input patches, ${snapshot.outputs.length} output patches, ${snapshot.stereoPairs.length} stereo pairs.`,
       });
       flush();
       // Initial fill is complete — renderer freezes the Input Patching list.

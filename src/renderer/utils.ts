@@ -3,12 +3,12 @@
  * DOM element refs, cross-tab state, and generic helpers.
  * Every tab module imports from here.
  */
-import type { Els, RendererState } from "./types";
+import type { ElementRefs, RendererState } from "./types";
 
-const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
-  document.querySelector(sel) as T;
+const $ = <T extends HTMLElement = HTMLElement>(selector: string): T =>
+  document.querySelector(selector) as T;
 
-export const els: Els = {
+export const els: ElementRefs = {
   connectScreen: $("#connect-screen"),
   dashScreen: $("#dash-screen"),
   ip: $("#ip-input"),

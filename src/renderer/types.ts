@@ -11,7 +11,7 @@ declare global {
 }
 
 /** Typed refs to every element the renderer touches. */
-export interface Els {
+export interface ElementRefs {
   connectScreen: HTMLElement;
   dashScreen: HTMLElement;
   ip: HTMLInputElement;

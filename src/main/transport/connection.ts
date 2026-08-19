@@ -34,7 +34,7 @@ import {
   encodeSubExtra2,
   encodeSubExtra3,
 } from "./frame";
-import { Buf } from "./buffer";
+import { BufferReader } from "./buffer";
 import { modelName } from "../models";
 
 export const SQ_TCP_PORT = 51326;

@@ -31,10 +31,10 @@ export function clear(): void {
 }
 
 /** Show routing update counters in the log panel header. */
-export function updateStat(snap: SnapshotPayload): void {
+export function updateStat(snapshot: SnapshotPayload): void {
   const parts: string[] = [];
-  parts.push(`обновлений: ${snap.updates}`);
-  if (snap.routingBlockBytes) parts.push(`routing block: ${snap.routingBlockBytes} B`);
+  parts.push(`обновлений: ${snapshot.updates}`);
+  if (snapshot.routingBlockBytes) parts.push(`routing block: ${snapshot.routingBlockBytes} B`);
   els.updateStat.textContent = parts.join(" · ");
 }
 

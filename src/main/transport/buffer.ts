@@ -5,7 +5,7 @@
  *   - 16-bit values: little-endian u16
  *   - 32-bit values: two little-endian u16 words (also little-endian overall)
  */
-export class Buf {
+export class BufferReader {
   private data: Buffer;
   private wp = 0; // write position
   private rp = 0; // read position

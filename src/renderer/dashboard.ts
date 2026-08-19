@@ -48,11 +48,11 @@ window.sq.onStatus((p: StatusPayload) => {
   }
 });
 
-window.sq.onRouting((snap: SnapshotPayload) => {
-  routing.onRoutingSnapshot(snap);
-  monitor.updateChannelNames(snap.inputs);
-  log.updateStat(snap);
-  state.currentSceneName = snap.currentSceneName ?? null;
+window.sq.onRouting((snapshot: SnapshotPayload) => {
+  routing.onRoutingSnapshot(snapshot);
+  monitor.updateChannelNames(snapshot.inputs);
+  log.updateStat(snapshot);
+  state.currentSceneName = snapshot.currentSceneName ?? null;
   updateSceneHint();
 });
 

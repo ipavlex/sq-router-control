@@ -29,7 +29,7 @@
  *  0x15  InitState    Mixer→app: 720 bytes initial state
  *  0x19  Sync         Mixer→app: empty, marks end of initial burst
  */
-import { Buf } from "./buffer";
+import { BufferReader } from "./buffer";
 
 export const MARKER = 0x7f;
 export const DSP_MARKER = 0xf7;
@@ -62,7 +62,7 @@ export interface Frame {
 }
 
 export function encodeFrame(subType: number, payload: Buffer): Buffer {
-  const buf = new Buf(HEADER_LEN + payload.length);
+  const buf = new BufferReader(HEADER_LEN + payload.length);
   buf.writeU8(MARKER);
   buf.writeU8(subType);
   buf.writeU32LE(payload.length);
@@ -76,7 +76,7 @@ export function encodeEmpty(subType: number): Buffer {
 
 /** Step 1 of handshake: tell mixer which UDP port we'll listen on for meters. */
 export function encodeMeterSub(udpPort: number): Buffer {
-  const p = new Buf(2);
+  const p = new BufferReader(2);
   p.writeU16LE(udpPort);
   return encodeFrame(Sub.MeterSub, p.toBuffer());
 }

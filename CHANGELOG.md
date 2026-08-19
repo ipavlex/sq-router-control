@@ -5,6 +5,15 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.5] — 2026-08-19
+
+### Изменено
+- Интерфейс `Els` переименован в `ElementRefs` (переменная `els` сохранена).
+- Сокращённые идентификаторы переименованы в полные: `Buf` → `BufferReader`,
+  `sel` → `selector`, `lbl` → `label`, `mod` → `modifier`, `lr` → `side`,
+  `snap` → `snapshot`, `cfg` → `config`, `fc` → `frameCounters`,
+  `rec` → `record`, `gen` → `generation`, `l`/`r` → `left`/`right`.
+
 ## [1.0.4] — 2026-08-19
 
 ### Изменено

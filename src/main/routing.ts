@@ -86,8 +86,8 @@ export function labelToB3(label: string): number | null {
   if (!_labelToB3Cache) {
     const m: Record<string, number> = {};
     for (let b3 = 0; b3 <= 0x7f; b3++) {
-      const lbl = b3ToLabel(b3);
-      if (!(lbl in m)) m[lbl] = b3;
+      const label = b3ToLabel(b3);
+      if (!(label in m)) m[label] = b3;
     }
     _labelToB3Cache = m;
   }
@@ -170,69 +170,69 @@ export class RoutingModel {
     if (!raw || raw.length < 7) return false;
 
     const ch = raw[3];
-    const mod = raw[4];
+    const modifier = raw[4];
     const valLo = raw[5];
     const valHi = raw[6];
 
     // INPUT PATCH: modifier is one of the input source codes.
-    if (mod >= 0x01 && mod <= 0x04) {
+    if (modifier >= 0x01 && modifier <= 0x04) {
       const destB3 = valLo;
-      const rec: InputPatch = {
+      const record: InputPatch = {
         destB3,
         destLabel: b3ToLabel(destB3),
         name: this.names.get(destB3) ?? "",
-        source: mod,
-        sourceLabel: INPUT_SOURCE_LABEL[mod] ?? `Src 0x${mod.toString(16)}`,
+        source: modifier,
+        sourceLabel: INPUT_SOURCE_LABEL[modifier] ?? `Src 0x${modifier.toString(16)}`,
         sourceChannel: ch,
       };
-      this.inputPatches.set(destB3, rec);
+      this.inputPatches.set(destB3, record);
       this.updates++;
       return true;
     }
 
     // OUTPUT PATCH (mixer bus → physical output): modifier 0x0f.
-    if (mod === 0x0f) {
+    if (modifier === 0x0f) {
       const sourceB3 = ch;
       const dest = valHi;
-      const rec: OutputPatch = {
+      const record: OutputPatch = {
         kind: "bus",
         sourceLabel: b3ToLabel(sourceB3),
         dest,
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
       };
-      this.replaceOutput("bus", rec.sourceLabel, rec);
+      this.replaceOutput("bus", record.sourceLabel, record);
       this.updates++;
       return true;
     }
 
     // FX RETURN OUTPUT PATCH: modifier 0x16 (L) / 0x17 (R).
-    if (mod === 0x16 || mod === 0x17) {
+    if (modifier === 0x16 || modifier === 0x17) {
       const dest = valHi;
-      const lr = mod === 0x16 ? "L" : "R";
-      const rec: OutputPatch = {
+      const side = modifier === 0x16 ? "L" : "R";
+      const record: OutputPatch = {
         kind: "fx",
-        sourceLabel: `FX${ch + 1} ${lr}`,
+        sourceLabel: `FX${ch + 1} ${side}`,
         dest,
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
       };
-      this.replaceOutput("fx", rec.sourceLabel, rec);
+      this.replaceOutput("fx", record.sourceLabel, record);
       this.updates++;
       return true;
     }
 
     // MONITOR OUTPUT PATCH: modifier 0x11.
-    if (mod === 0x11) {
+    if (modifier === 0x11) {
       const dest = valHi;
-      const rec: OutputPatch = {
+      const record: OutputPatch = {
         kind: "monitor",
         sourceLabel: MONITOR_SOURCE_LABEL[ch] ?? `Mon ${ch}`,
         dest,
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
       };
-      this.replaceOutput("monitor", rec.sourceLabel, rec);
+      this.replaceOutput("monitor", record.sourceLabel, record);
       this.updates++;
       return true;
     }
@@ -242,15 +242,15 @@ export class RoutingModel {
 
   /** Replace an existing output patch keyed by (kind, source) to avoid dupes. */
   private replaceOutput(
-    kind: OutputPatch["kind"],
-    sourceLabel: string,
-    rec: OutputPatch
+      kind: OutputPatch["kind"],
+      sourceLabel: string,
+      record: OutputPatch
   ): void {
     const idx = this.outputPatches.findIndex(
       (p) => p.kind === kind && p.sourceLabel === sourceLabel
     );
-    if (idx >= 0) this.outputPatches[idx] = rec;
-    else this.outputPatches.push(rec);
+    if (idx >= 0) this.outputPatches[idx] = record;
+    else this.outputPatches.push(record);
   }
 
   setChannelName(b3: number, name: string): void {

@@ -70,15 +70,15 @@ export async function doDisconnect(): Promise<void> {
 export async function doRefresh(): Promise<void> {
   // In demo mode "Обновить" regenerates a completely new simulated routing
   // (different names, stereo pairs and patching) instead of re-reading state.
-  const snap = state.isDemoMode
+  const snapshot = state.isDemoMode
     ? await window.sq.demoRefresh()
     : await window.sq.getSnapshot();
-  renderInputs(snap.inputs);
+  renderInputs(snapshot.inputs);
   // The Input Patching table is a startup snapshot — a manual refresh must not
   // re-sync it either (selectors stay active for editing).
-  syncEditInputs(snap.inputs, snap.stereoPairs);
-  updateStat(snap);
-  state.currentSceneName = snap.currentSceneName ?? null;
+  syncEditInputs(snapshot.inputs, snapshot.stereoPairs);
+  updateStat(snapshot);
+  state.currentSceneName = snapshot.currentSceneName ?? null;
   updateSceneHint();
 }
 
