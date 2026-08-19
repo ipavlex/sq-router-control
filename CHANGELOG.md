@@ -5,6 +5,11 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.7] — 2026-08-19
+
+### Изменено
+- Функция `setMsg` переименована в `setMessage`.
+
 ## [1.0.6] — 2026-08-19
 
 ### Изменено

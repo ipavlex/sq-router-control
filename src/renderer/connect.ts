@@ -2,7 +2,7 @@
  * SQ Router Control — connection screen.
  * Connect / demo / disconnect / refresh flows.
  */
-import { elementRefs, state, addRecent, isValidHost, setLoading, setMsg, showScreen, updateSceneHint } from "./utils";
+import { elementRefs, state, addRecent, isValidHost, setLoading, setMessage, showScreen, updateSceneHint } from "./utils";
 import { renderInputs, syncEditInputs } from "./tabs/routing";
 import { updateStat } from "./tabs/log";
 import { enterDashboard } from "./dashboard";
@@ -13,7 +13,7 @@ export async function doStartDemo(): Promise<void> {
   if (demoStarting) return;
   demoStarting = true;
   elementRefs.demoBtn.disabled = true;
-  setMsg("", "");
+  setMessage("", "");
   try {
     const res = await window.sq.startDemo();
     if (res && res.ok) {
@@ -21,10 +21,10 @@ export async function doStartDemo(): Promise<void> {
       enterDashboard(res.version, res.spec ?? null, "demo");
       await doRefresh();
     } else {
-      setMsg((res && res.error) || "Не удалось запустить демо.", "error");
+      setMessage((res && res.error) || "Не удалось запустить демо.", "error");
     }
   } catch (err) {
-    setMsg(err instanceof Error ? err.message : String(err), "error");
+    setMessage(err instanceof Error ? err.message : String(err), "error");
   } finally {
     demoStarting = false;
   }
@@ -35,12 +35,12 @@ export async function doConnect(): Promise<void> {
   const port = Number(elementRefs.port.value) || undefined;
 
   if (!isValidHost(host)) {
-    setMsg("Введите корректный IP-адрес или имя хоста.", "error");
+    setMessage("Введите корректный IP-адрес или имя хоста.", "error");
     elementRefs.ip.focus();
     return;
   }
 
-  setMsg("", "");
+  setMessage("", "");
   setLoading(true);
 
   try {
@@ -52,17 +52,17 @@ export async function doConnect(): Promise<void> {
       await doRefresh();
     } else {
       setLoading(false);
-      setMsg((res && res.error) || "Не удалось подключиться.", "error");
+      setMessage((res && res.error) || "Не удалось подключиться.", "error");
     }
   } catch (err) {
     setLoading(false);
-    setMsg(err instanceof Error ? err.message : String(err), "error");
+    setMessage(err instanceof Error ? err.message : String(err), "error");
   }
 }
 
 export async function doDisconnect(): Promise<void> {
   await window.sq.disconnect();
-  setMsg("", "");
+  setMessage("", "");
   elementRefs.ip.value = "";
   showScreen("connect");
 }

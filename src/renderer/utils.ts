@@ -88,7 +88,7 @@ export function isValidHost(host: string): boolean {
   return ipv4 || hostname;
 }
 
-export function setMsg(text: string, kind?: string): void {
+export function setMessage(text: string, kind?: string): void {
   if (!text) {
     elementRefs.connectMsg.hidden = true;
     elementRefs.connectMsg.textContent = "";

@@ -4,7 +4,7 @@
  * to the tab modules, and handles view switching. The renderer entry point
  * imports this module for its side effects.
  */
-import { elementRefs, state, setLoading, setMsg, showScreen, showView, updateSceneHint } from "./utils";
+import { elementRefs, state, setLoading, setMessage, showScreen, showView, updateSceneHint } from "./utils";
 import * as routing from "./tabs/routing";
 import * as monitor from "./tabs/monitor";
 import * as log from "./tabs/log";
@@ -43,7 +43,7 @@ window.sq.onStatus((p: StatusPayload) => {
     if (!elementRefs.dashScreen.hidden) {
       showScreen("connect");
       state.modelSpec = null;
-      setMsg("Соединение с пультом разорвано.", "error");
+      setMessage("Соединение с пультом разорвано.", "error");
     }
   }
 });
