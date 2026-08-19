@@ -5,6 +5,13 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.9] — 2026-08-19
+
+### Изменено
+- Экран подключения вынесен в отдельный модуль `src/renderer/connect/`
+  (`index.ts` + `view.html`) по образцу вкладок; разметка подключается через
+  плейсхолдер `@tab:connect` в `index.template.html`.
+
 ## [1.0.8] — 2026-08-19
 
 ### Изменено

@@ -1,0 +1,57 @@
+<!-- ── Connection screen ─────────────────────────────────────────── -->
+<section id="connect-screen" class="screen">
+  <div class="brand">
+    <div class="logo">SQ</div>
+    <div>
+      <h1>SQ Router Control</h1>
+      <p class="sub">Allen &amp; Heath SQ — network routing monitor</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <label for="ip-input" class="field-label">IP-адрес пульта</label>
+    <div class="ip-row">
+      <input
+        id="ip-input"
+        class="ip-input"
+        type="text"
+        inputmode="decimal"
+        placeholder="192.168.1.60"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <input
+        id="port-input"
+        class="port-input"
+        type="number"
+        value="51326"
+        min="1"
+        max="65535"
+        title="TCP port (default 51326)"
+      />
+    </div>
+    <p class="hint">
+      Порт по умолчанию: <code>51326</code> (бинарный протокол SQ). Порт MIDI
+      — <code>51325</code>.
+    </p>
+
+    <button id="connect-btn" type="button" class="btn primary">
+      <span class="btn-label">Подключиться</span>
+    </button>
+
+    <div class="divider">
+      <span>или</span>
+    </div>
+
+    <button id="demo-btn" type="button" class="btn ghost full">
+      ▶ Демо-режим (без пульта)
+    </button>
+
+    <div id="connect-msg" class="msg" hidden></div>
+  </div>
+
+  <div class="recent" id="recent-row" hidden>
+    <span class="recent-label">Недавние:</span>
+    <div id="recent-list" class="recent-list"></div>
+  </div>
+</section>

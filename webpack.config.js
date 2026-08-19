@@ -66,6 +66,7 @@ module.exports = [
       new HtmlFromTabsPlugin({
         template: path.resolve(__dirname, "src/renderer/index.template.html"),
         fragments: [
+          { name: "connect", file: path.resolve(__dirname, "src/renderer/connect/view.html") },
           { name: "routing", file: path.resolve(__dirname, "src/renderer/tabs/routing/view.html") },
           { name: "log", file: path.resolve(__dirname, "src/renderer/tabs/log/view.html") },
           { name: "monitor", file: path.resolve(__dirname, "src/renderer/tabs/monitor/view.html") },

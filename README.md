@@ -91,9 +91,9 @@ src/
     ├── styles.css
     ├── types.ts           # типы рендерера (window.sq, ElementRefs, RendererState)
     ├── utils.ts           # DOM-элементы, состояние, хелперы
-    ├── connect.ts         # экран подключения
     ├── dashboard.ts       # дашборд, подписки на события пульта
     ├── renderer.ts        # точка входа (webpack)
+    ├── connect/           # экран подключения (index.ts, view.html)
     └── tabs/              # вкладки — по одной на папку
         ├── routing/       # вкладка «Роутинг» (types.ts, view.html, modals.html)
         ├── monitor/       # вкладка «Монитор» (types.ts, view.html)

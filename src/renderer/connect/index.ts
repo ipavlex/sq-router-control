@@ -1,11 +1,11 @@
 /**
- * SQ Router Control — connection screen.
+ * SQ Router Control — connection screen module.
  * Connect / demo / disconnect / refresh flows.
  */
-import { elementRefs, state, addRecent, isValidHost, setLoading, setMessage, showScreen, updateSceneHint } from "./utils";
-import { renderInputs, syncEditInputs } from "./tabs/routing";
-import { updateStat } from "./tabs/log";
-import { enterDashboard } from "./dashboard";
+import { elementRefs, state, addRecent, isValidHost, setLoading, setMessage, showScreen, updateSceneHint } from "../utils";
+import { renderInputs, syncEditInputs } from "../tabs/routing";
+import { updateStat } from "../tabs/log";
+import { enterDashboard } from "../dashboard";
 
 let demoStarting = false;
 
