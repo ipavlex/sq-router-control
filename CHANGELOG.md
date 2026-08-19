@@ -5,6 +5,17 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.2] — 2026-08-19
+
+### Изменено
+- Весь код переведён на TypeScript: рендерер разделён на модули по вкладкам
+  (`utils.ts`, `connect.ts`, `dashboard.ts`, `routing.ts`, `monitor.ts`,
+  `log.ts`), общие IPC-типы вынесены в `src/shared/ipc.ts`; main-процесс и
+  preload используют эти типы.
+- Добавлена сборка на webpack (таргеты main / preload / renderer); проверка
+  типов — отдельной командой `npm run typecheck`.
+- Устаревшие JS-файлы рендерера удалены.
+
 ## [1.0.1] — 2026-08-19
 
 ### Изменено

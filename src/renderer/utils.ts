@@ -1,13 +1,74 @@
-"use strict";
-/* SQ Router Control — shared core.
+/**
+ * SQ Router Control — shared renderer core.
  * DOM element refs, cross-tab state, and generic helpers.
- * Loaded first; exposes `window.SQ` for the tab modules. */
+ * Every tab module imports from here.
+ */
+import type { ModelSpec, SnapshotInput } from "../shared/ipc";
 
-window.SQ = window.SQ || {};
+const $ = <T extends HTMLElement = HTMLElement>(sel: string): T =>
+  document.querySelector(sel) as T;
 
-const $ = (sel) => document.querySelector(sel);
+/** Typed refs to every element the renderer touches. */
+export interface Els {
+  connectScreen: HTMLElement;
+  dashScreen: HTMLElement;
+  ip: HTMLInputElement;
+  port: HTMLInputElement;
+  connectBtn: HTMLButtonElement;
+  demoBtn: HTMLButtonElement;
+  connectMsg: HTMLElement;
+  recentRow: HTMLElement;
+  recentList: HTMLElement;
+  topbarTitle: HTMLElement;
+  topbarSub: HTMLElement;
+  requestBtn: HTMLButtonElement;
+  logBtn: HTMLButtonElement;
+  viewRouting: HTMLElement;
+  viewLog: HTMLElement;
+  viewMonitor: HTMLElement;
+  routingBtn: HTMLButtonElement;
+  monitorBtn: HTMLButtonElement;
+  monLDest: HTMLSelectElement;
+  monRDest: HTMLSelectElement;
+  mixButtons: HTMLElement;
+  chButtons: HTMLElement;
+  mainlrBtn: HTMLButtonElement;
+  monEnable: HTMLInputElement;
+  disconnectBtn: HTMLButtonElement;
+  inputTbody: HTMLTableSectionElement;
+  inEmpty: HTMLElement;
+  editInputTbody: HTMLTableSectionElement;
+  editInEmpty: HTMLElement;
+  updateStat: HTMLElement;
+  log: HTMLElement;
+  clearLog: HTMLButtonElement;
+  saveRoutingBtn: HTMLButtonElement;
+  topbarScene: HTMLElement;
+  saveFeedback: HTMLElement;
+  saveModal: HTMLElement;
+  saveNameInput: HTMLInputElement;
+  saveCancelBtn: HTMLButtonElement;
+  saveConfirmBtn: HTMLButtonElement;
+  loadRoutingBtn: HTMLButtonElement;
+  loadModal: HTMLElement;
+  loadList: HTMLElement;
+  loadEmpty: HTMLElement;
+  loadCancelBtn: HTMLButtonElement;
+  loadConfirmBtn: HTMLButtonElement;
+  loadIgnoreConfig: HTMLElement;
+  loadIgnoreConfigInput: HTMLInputElement;
+  uploadBtn: HTMLButtonElement;
+  downloadBtn: HTMLButtonElement;
+  abBtn: HTMLButtonElement;
+  bBtn: HTMLButtonElement;
+  activePatchingTitle: HTMLElement;
+  inputPatchingTitle: HTMLElement;
+  syncScrollBtn: HTMLButtonElement;
+  editTableWrap: HTMLElement;
+  activeTableWrap: HTMLElement;
+}
 
-const els = {
+export const els: Els = {
   connectScreen: $("#connect-screen"),
   dashScreen: $("#dash-screen"),
   ip: $("#ip-input"),
@@ -66,23 +127,31 @@ const els = {
   activeTableWrap: $("#active-table-wrap"),
 };
 
-/** Cross-tab state shared by all modules. */
-const state = {
+/** Cross-tab state shared by all renderer modules. */
+export interface RendererState {
   /** Current model spec; drives input/output count adaptation. */
-  modelSpec: null,
+  modelSpec: ModelSpec | null;
   /** Stereo pairs from snapshot: [[leftB3, rightB3], ...] */
-  stereoPairs: [],
+  stereoPairs: number[][];
   /** Last routing snapshot received from the console (Active Patching data). */
-  activeInputs: [],
+  activeInputs: SnapshotInput[];
   /** Name of the console's currently-active scene (from snapshot), or null. */
-  currentSceneName: null,
+  currentSceneName: string | null;
   /** Whether the current session is running in demo (simulated) mode. */
+  isDemoMode: boolean;
+}
+
+export const state: RendererState = {
+  modelSpec: null,
+  stereoPairs: [],
+  activeInputs: [],
+  currentSceneName: null,
   isDemoMode: false,
 };
 
 const RECENT_KEY = "sq_recent_hosts";
 
-function isValidHost(host) {
+export function isValidHost(host: string): boolean {
   if (!host) return false;
   // IPv4 or hostname.
   const ipv4 =
@@ -92,7 +161,7 @@ function isValidHost(host) {
   return ipv4 || hostname;
 }
 
-function setMsg(text, kind) {
+export function setMsg(text: string, kind?: string): void {
   if (!text) {
     els.connectMsg.hidden = true;
     els.connectMsg.textContent = "";
@@ -103,7 +172,7 @@ function setMsg(text, kind) {
   els.connectMsg.className = "msg " + (kind || "error");
 }
 
-function setLoading(on) {
+export function setLoading(on: boolean): void {
   els.connectBtn.disabled = on;
   const label = els.connectBtn.querySelector(".btn-label");
   const existing = els.connectBtn.querySelector(".spinner");
@@ -112,14 +181,14 @@ function setLoading(on) {
     const spin = document.createElement("span");
     spin.className = "spinner";
     els.connectBtn.insertBefore(spin, label);
-    label.textContent = "Подключение…";
+    if (label) label.textContent = "Подключение…";
   } else {
     if (existing) existing.remove();
-    label.textContent = "Подключиться";
+    if (label) label.textContent = "Подключиться";
   }
 }
 
-function getRecent() {
+export function getRecent(): string[] {
   try {
     return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
   } catch {
@@ -127,14 +196,14 @@ function getRecent() {
   }
 }
 
-function addRecent(host) {
+export function addRecent(host: string): void {
   const list = getRecent().filter((h) => h !== host);
   list.unshift(host);
   localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 6)));
   renderRecent();
 }
 
-function renderRecent() {
+export function renderRecent(): void {
   const list = getRecent();
   if (!list.length) {
     els.recentRow.hidden = true;
@@ -154,18 +223,18 @@ function renderRecent() {
   }
 }
 
-function showScreen(which) {
+export function showScreen(which: "connect" | "dash"): void {
   els.connectScreen.hidden = which !== "connect";
   els.dashScreen.hidden = which !== "dash";
 }
 
-function fmtTime() {
+export function fmtTime(): string {
   const d = new Date();
-  const p = (n) => String(n).padStart(2, "0");
+  const p = (n: number): string => String(n).padStart(2, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-function escapeHtml(s) {
+export function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -173,21 +242,21 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function todayStr() {
+export function todayStr(): string {
   const d = new Date();
-  const p = (n) => String(n).padStart(2, "0");
+  const p = (n: number): string => String(n).padStart(2, "0");
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
 }
 
 /** Show the current scene name in the topbar, if any. */
-function updateSceneHint() {
+export function updateSceneHint(): void {
   els.topbarScene.textContent = state.currentSceneName
     ? ` · 🎬 ${state.currentSceneName}`
     : "";
 }
 
 /** Switch between the routing / log / monitor views. */
-function showView(which) {
+export function showView(which: "routing" | "log" | "monitor"): void {
   els.viewRouting.hidden = which !== "routing";
   els.viewLog.hidden = which !== "log";
   els.viewMonitor.hidden = which !== "monitor";
@@ -198,7 +267,7 @@ function showView(which) {
 }
 
 /** Make a panel title blink green once (one-shot animation). */
-function flashTitle(el) {
+export function flashTitle(el: HTMLElement | null | undefined): void {
   if (!el) return;
   el.classList.remove("flash-green");
   void el.offsetWidth; // restart the animation if it just ran
@@ -207,24 +276,3 @@ function flashTitle(el) {
     once: true,
   });
 }
-
-SQ.els = els;
-SQ.state = state;
-SQ.utils = {
-  $,
-  els,
-  state,
-  isValidHost,
-  setMsg,
-  setLoading,
-  getRecent,
-  addRecent,
-  renderRecent,
-  showScreen,
-  fmtTime,
-  escapeHtml,
-  todayStr,
-  updateSceneHint,
-  showView,
-  flashTitle,
-};

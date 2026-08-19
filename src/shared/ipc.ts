@@ -1,0 +1,98 @@
+/**
+ * Shared IPC payload types and the `sq` bridge API surface.
+ * Used by both the main process (preload) and the renderer.
+ */
+
+export interface VersionInfo {
+  model: number;
+  modelName: string;
+  fwA: number;
+  fwB: number;
+  build?: number;
+}
+
+export interface ModelSpec {
+  id: number;
+  name: string;
+  inputChannels: number;
+  localInputs: number;
+  localOutputs: number;
+  usbChannels: number;
+  mixBuses: number;
+  dcaGroups: number;
+  description: string;
+}
+
+export interface ConnectResult {
+  ok: boolean;
+  version?: VersionInfo;
+  spec?: ModelSpec;
+  error?: string;
+}
+
+export interface SnapshotInput {
+  destB3: number;
+  destLabel: string;
+  name: string;
+  source: number;
+  sourceLabel: string;
+  sourceChannel: number;
+}
+
+export interface SnapshotOutput {
+  kind: string;
+  sourceLabel: string;
+  dest: number;
+  destLabel: string;
+  destChannel: number;
+}
+
+export interface SnapshotPayload {
+  inputs: SnapshotInput[];
+  outputs: SnapshotOutput[];
+  stereoPairs: number[][];
+  updates: number;
+  routingBlockBytes: number | null;
+  /** Name of the console's currently-active scene, if known. */
+  currentSceneName?: string | null;
+}
+
+export interface StatusPayload {
+  connected: boolean;
+  host?: string;
+  version?: VersionInfo;
+  spec?: ModelSpec;
+}
+
+export type LogLevel = "dsp" | "frame" | "ok" | "warn" | "error";
+
+export interface LogPayload {
+  level: LogLevel;
+  msg: string;
+}
+
+/**
+ * The typed `window.sq` bridge exposed by the preload script.
+ */
+export interface SqApi {
+  connect(host: string, port?: number): Promise<ConnectResult>;
+  disconnect(): Promise<boolean>;
+  getSnapshot(): Promise<SnapshotPayload>;
+  demoRefresh(): Promise<SnapshotPayload>;
+  setMonitorOutput(side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
+  setPafl(b3: number, on: boolean): Promise<boolean>;
+  setOutputPatch(sourceB3: number, destType: number, destChannel: number): Promise<boolean>;
+  requestDump(): Promise<boolean>;
+  applyRouting(data: {
+    inputs?: SnapshotInput[];
+    outputs?: SnapshotOutput[];
+  }): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
+  setInputPatch(destB3: number, source: number, sourceChannel: number): Promise<boolean>;
+  startDemo(): Promise<ConnectResult>;
+  getStatus(): Promise<StatusPayload>;
+  onStatus(cb: (p: StatusPayload) => void): () => void;
+  onRouting(cb: (p: SnapshotPayload) => void): () => void;
+  onLog(cb: (p: LogPayload) => void): () => void;
+  /** Fired once the console's initial state burst has been fully received. */
+  onInitialState(cb: () => void): () => void;
+}

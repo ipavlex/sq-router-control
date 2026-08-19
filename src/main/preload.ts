@@ -3,66 +3,13 @@
  * Exposes a minimal, typed `sq` API on the renderer's window.
  */
 import { contextBridge, ipcRenderer } from "electron";
-
-export interface ConnectResult {
-  ok: boolean;
-  version?: {
-    model: number;
-    modelName: string;
-    fwA: number;
-    fwB: number;
-    build?: number;
-  };
-  spec?: ModelSpec;
-  error?: string;
-}
-
-export interface ModelSpec {
-  id: number;
-  name: string;
-  inputChannels: number;
-  localInputs: number;
-  localOutputs: number;
-  usbChannels: number;
-  mixBuses: number;
-  dcaGroups: number;
-  description: string;
-}
-
-export interface StatusPayload {
-  connected: boolean;
-  host?: string;
-  version?: ConnectResult["version"];
-  spec?: ModelSpec;
-}
-
-export interface SnapshotPayload {
-  inputs: {
-    destB3: number;
-    destLabel: string;
-    name: string;
-    source: number;
-    sourceLabel: string;
-    sourceChannel: number;
-  }[];
-  outputs: {
-    kind: string;
-    sourceLabel: string;
-    dest: number;
-    destLabel: string;
-    destChannel: number;
-  }[];
-  stereoPairs: number[][];
-  updates: number;
-  routingBlockBytes: number | null;
-  /** Name of the console's currently-active scene, if known. */
-  currentSceneName?: string | null;
-}
-
-export interface LogPayload {
-  level: "dsp" | "frame" | "ok" | "warn" | "error";
-  msg: string;
-}
+import type {
+  ConnectResult,
+  LogPayload,
+  ModelSpec,
+  SnapshotPayload,
+  StatusPayload,
+} from "../shared/ipc";
 
 contextBridge.exposeInMainWorld("sq", {
   connect: (host: string, port?: number): Promise<ConnectResult> =>

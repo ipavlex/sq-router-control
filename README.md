@@ -37,8 +37,14 @@
 
 ```bash
 npm install        # установка зависимостей
-npm start          # сборка TypeScript и запуск приложения
+npm start          # сборка (webpack) и запуск приложения
 npm run dev        # то же, с логированием Electron
+```
+
+Проверка типов:
+
+```bash
+npm run typecheck  # tsc --noEmit
 ```
 
 ## Сборка дистрибутивов
@@ -78,11 +84,23 @@ src/
 │   ├── models.ts          # спецификации моделей SQ-5/6/7
 │   ├── routing.ts         # декодер DSP-кадров и модель роутинга
 │   └── transport/         # TCP-соединение, буфер, разбор кадров
-└── renderer/              # UI (vanilla JS, без фреймворков)
+├── shared/
+│   └── ipc.ts             # общие типы IPC и интерфейс window.sq
+└── renderer/              # UI (TypeScript, без фреймворков)
     ├── index.html
-    ├── renderer.js
-    └── styles.css
+    ├── styles.css
+    ├── types.ts           # декларация window.sq
+    ├── utils.ts           # DOM-элементы, состояние, хелперы
+    ├── connect.ts         # экран подключения
+    ├── dashboard.ts       # дашборд, подписки на события пульта
+    ├── routing.ts         # вкладка «Роутинг»
+    ├── monitor.ts         # вкладка «Монитор»
+    ├── log.ts             # вкладка «Журнал»
+    └── renderer.ts        # точка входа (webpack)
 ```
+
+Сборка: webpack (`webpack.config.js`) собирает main, preload и renderer в
+`dist/`; типы проверяются отдельно через `tsc --noEmit`.
 
 ## Протокол (кратко)
 
