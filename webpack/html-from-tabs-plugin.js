@@ -1,10 +1,12 @@
 /**
  * HtmlFromTabsPlugin — assembles dist/renderer/index.html from
- * src/renderer/index.template.html plus per-tab HTML fragments.
+ * src/renderer/index.template.html plus per-module HTML fragments.
  *
  * The template contains placeholders of the form `<!-- @tab:NAME -->`.
  * Each configured fragment is read from disk and substituted in place of
- * its placeholder, so every tab owns its markup next to its code.
+ * its placeholder, so every module owns its markup next to its code.
+ * Substitution is multi-pass: fragments may themselves contain placeholders
+ * (e.g. the dashboard fragment embeds the tab placeholders).
  */
 const fs = require("fs");
 const path = require("path");
@@ -32,18 +34,30 @@ class HtmlFromTabsPlugin {
         },
         () => {
           let html = fs.readFileSync(this.template, "utf8");
-          for (const frag of this.fragments) {
-            const content = fs.readFileSync(frag.file, "utf8");
-            const placeholder = `<!-- @tab:${frag.name} -->`;
-            if (!html.includes(placeholder)) {
-              compilation.errors.push(
-                new Error(
-                  `HtmlFromTabsPlugin: placeholder "${placeholder}" not found in ${this.template}`
-                )
-              );
-              continue;
+          const byName = new Map(
+            this.fragments.map((f) => [f.name, f.file])
+          );
+          // Multi-pass: a fragment may reference other placeholders, so keep
+          // substituting until no placeholder remains (or we stop making
+          // progress).
+          let changed = true;
+          while (changed) {
+            changed = false;
+            for (const [name, file] of byName) {
+              const placeholder = `<!-- @tab:${name} -->`;
+              if (html.includes(placeholder)) {
+                html = html.replace(placeholder, fs.readFileSync(file, "utf8"));
+                changed = true;
+              }
             }
-            html = html.replace(placeholder, content);
+          }
+          const leftover = html.match(/<!-- @tab:[a-z-]+ -->/g);
+          if (leftover) {
+            compilation.errors.push(
+              new Error(
+                `HtmlFromTabsPlugin: unresolved placeholder(s) ${leftover.join(", ")} in ${this.template}`
+              )
+            );
           }
           compilation.emitAsset(
             this.output,

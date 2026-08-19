@@ -5,6 +5,13 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.10] — 2026-08-19
+
+### Изменено
+- Дашборд вынесен в отдельный модуль `src/renderer/dashboard/` (`index.ts` +
+  `view.html`) по образцу вкладок. `HtmlFromTabsPlugin` теперь подставляет
+  фрагменты много-проходно: фрагмент дашборда содержит плейсхолдеры вкладок.
+
 ## [1.0.9] — 2026-08-19
 
 ### Изменено

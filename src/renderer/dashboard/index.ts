@@ -1,14 +1,14 @@
 /**
- * SQ Router Control — dashboard wiring.
+ * SQ Router Control — dashboard module.
  * Boots the dashboard, subscribes to the console event stream and routes it
  * to the tab modules, and handles view switching. The renderer entry point
  * imports this module for its side effects.
  */
-import { elementRefs, state, setLoading, setMessage, showScreen, showView, updateSceneHint } from "./utils";
-import * as routing from "./tabs/routing";
-import * as monitor from "./tabs/monitor";
-import * as log from "./tabs/log";
-import type { LogPayload, ModelSpec, SnapshotPayload, StatusPayload, VersionInfo } from "../shared/ipc";
+import { elementRefs, state, setLoading, setMessage, showScreen, showView, updateSceneHint } from "../utils";
+import * as routing from "../tabs/routing";
+import * as monitor from "../tabs/monitor";
+import * as log from "../tabs/log";
+import type { LogPayload, ModelSpec, SnapshotPayload, StatusPayload, VersionInfo } from "../../shared/ipc";
 
 export function enterDashboard(
   version: VersionInfo | undefined,
