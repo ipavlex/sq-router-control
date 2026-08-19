@@ -1,0 +1,69 @@
+{
+  "name": "sq-router-control",
+  "version": "1.0.0",
+  "description": "Electron app to connect to an Allen & Heath SQ mixing console and display its current routing",
+  "main": "dist/main/main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --enable-logging",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.0"
+  },
+  "build": {
+    "appId": "com.sqrouter.control",
+    "productName": "SQ Router Control",
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "title": "SQ Router Control",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "AudioVideo"
+    }
+  }
+}
