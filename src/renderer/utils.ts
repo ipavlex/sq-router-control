@@ -8,7 +8,7 @@ import type { ElementRefs, RendererState } from "./types";
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T =>
   document.querySelector(selector) as T;
 
-export const els: ElementRefs = {
+export const elementRefs: ElementRefs = {
   connectScreen: $("#connect-screen"),
   dashScreen: $("#dash-screen"),
   ip: $("#ip-input"),
@@ -90,24 +90,24 @@ export function isValidHost(host: string): boolean {
 
 export function setMsg(text: string, kind?: string): void {
   if (!text) {
-    els.connectMsg.hidden = true;
-    els.connectMsg.textContent = "";
+    elementRefs.connectMsg.hidden = true;
+    elementRefs.connectMsg.textContent = "";
     return;
   }
-  els.connectMsg.hidden = false;
-  els.connectMsg.textContent = text;
-  els.connectMsg.className = "msg " + (kind || "error");
+  elementRefs.connectMsg.hidden = false;
+  elementRefs.connectMsg.textContent = text;
+  elementRefs.connectMsg.className = "msg " + (kind || "error");
 }
 
 export function setLoading(on: boolean): void {
-  els.connectBtn.disabled = on;
-  const label = els.connectBtn.querySelector(".btn-label");
-  const existing = els.connectBtn.querySelector(".spinner");
+  elementRefs.connectBtn.disabled = on;
+  const label = elementRefs.connectBtn.querySelector(".btn-label");
+  const existing = elementRefs.connectBtn.querySelector(".spinner");
   if (on) {
     if (existing) return;
     const spin = document.createElement("span");
     spin.className = "spinner";
-    els.connectBtn.insertBefore(spin, label);
+    elementRefs.connectBtn.insertBefore(spin, label);
     if (label) label.textContent = "Подключение…";
   } else {
     if (existing) existing.remove();
@@ -133,26 +133,26 @@ export function addRecent(host: string): void {
 export function renderRecent(): void {
   const list = getRecent();
   if (!list.length) {
-    els.recentRow.hidden = true;
+    elementRefs.recentRow.hidden = true;
     return;
   }
-  els.recentRow.hidden = false;
-  els.recentList.innerHTML = "";
+  elementRefs.recentRow.hidden = false;
+  elementRefs.recentList.innerHTML = "";
   for (const h of list) {
     const chip = document.createElement("span");
     chip.className = "recent-chip";
     chip.textContent = h;
     chip.addEventListener("click", () => {
-      els.ip.value = h;
-      els.ip.focus();
+      elementRefs.ip.value = h;
+      elementRefs.ip.focus();
     });
-    els.recentList.appendChild(chip);
+    elementRefs.recentList.appendChild(chip);
   }
 }
 
 export function showScreen(which: "connect" | "dash"): void {
-  els.connectScreen.hidden = which !== "connect";
-  els.dashScreen.hidden = which !== "dash";
+  elementRefs.connectScreen.hidden = which !== "connect";
+  elementRefs.dashScreen.hidden = which !== "dash";
 }
 
 export function fmtTime(): string {
@@ -177,20 +177,20 @@ export function todayStr(): string {
 
 /** Show the current scene name in the topbar, if any. */
 export function updateSceneHint(): void {
-  els.topbarScene.textContent = state.currentSceneName
+  elementRefs.topbarScene.textContent = state.currentSceneName
     ? ` · 🎬 ${state.currentSceneName}`
     : "";
 }
 
 /** Switch between the routing / log / monitor views. */
 export function showView(which: "routing" | "log" | "monitor"): void {
-  els.viewRouting.hidden = which !== "routing";
-  els.viewLog.hidden = which !== "log";
-  els.viewMonitor.hidden = which !== "monitor";
-  els.logBtn.textContent = which === "log" ? "← Назад" : "📋 Журнал";
+  elementRefs.viewRouting.hidden = which !== "routing";
+  elementRefs.viewLog.hidden = which !== "log";
+  elementRefs.viewMonitor.hidden = which !== "monitor";
+  elementRefs.logBtn.textContent = which === "log" ? "← Назад" : "📋 Журнал";
   // Highlight active tab
-  els.routingBtn.classList.toggle("active", which === "routing");
-  els.monitorBtn.classList.toggle("active", which === "monitor");
+  elementRefs.routingBtn.classList.toggle("active", which === "routing");
+  elementRefs.monitorBtn.classList.toggle("active", which === "monitor");
 }
 
 /** Make a panel title blink green once (one-shot animation). */

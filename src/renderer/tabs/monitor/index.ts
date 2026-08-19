@@ -3,7 +3,7 @@
  * L/R output selectors, mix / channel / Main LR routing into the selected
  * outputs, and the keyboard navigation.
  */
-import { els, state } from "../../utils";
+import { elementRefs, state } from "../../utils";
 import type { SnapshotInput } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 
@@ -44,7 +44,7 @@ function buildOutputOptions(): OutputOption[] {
 
 function populateMonitorSelects(): void {
   const opts = buildOutputOptions();
-  for (const sel of [els.monLDest, els.monRDest]) {
+  for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
     sel.innerHTML = "";
     // Placeholder
     const ph = document.createElement("option");
@@ -69,13 +69,13 @@ function populateMonitorSelects(): void {
     for (const g of Object.values(groups)) sel.appendChild(g);
   }
   // Default to Local Out 1 (L) and Local Out 2 (R)
-  els.monLDest.value = "0x1a:1";
-  els.monRDest.value = "0x1a:2";
+  elementRefs.monLDest.value = "0x1a:1";
+  elementRefs.monRDest.value = "0x1a:2";
 }
 
 /** Whether monitor changes should be applied to the actual mixer. */
 function monEnabled(): boolean {
-  return els.monEnable.checked;
+  return elementRefs.monEnable.checked;
 }
 
 /** Parse an L/R destination selector value into {destType, destChannel}. */
@@ -104,8 +104,8 @@ async function routeSourceToOutput(
  */
 async function routeActiveSelection(): Promise<void> {
   if (!monEnabled()) return;
-  const L = parseDest(els.monLDest);
-  const R = parseDest(els.monRDest);
+  const L = parseDest(elementRefs.monLDest);
+  const R = parseDest(elementRefs.monRDest);
   if (leftChannelB3 !== null && rightChannelB3 !== null) {
     await routeSourceToOutput(leftChannelB3, L);
     await routeSourceToOutput(rightChannelB3, R);
@@ -187,7 +187,7 @@ async function onChannelClick(b3: number, btn: HTMLButtonElement): Promise<void>
 }
 
 function buildMixButtons(): void {
-  const container = els.mixButtons;
+  const container = elementRefs.mixButtons;
   container.innerHTML = "";
   const items: MixItem[] = [];
   for (let i = 0; i < 12; i++) items.push({ b3: 0x58 + i, label: `Mix ${i + 1}` });
@@ -223,7 +223,7 @@ function isStereoRight(b3: number): boolean {
  * spanning 2 grid columns. Rebuilt when the console's stereo pairs change.
  */
 export function buildChannelButtons(): void {
-  const container = els.chButtons;
+  const container = elementRefs.chButtons;
   container.innerHTML = "";
 
   for (let i = 0; i < 48; i++) {
@@ -292,7 +292,7 @@ async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): 
 
 /** Clear all channel selections and highlights. Routing is left untouched. */
 async function clearAllChannels(): Promise<void> {
-  for (const btn of els.chButtons.querySelectorAll(".ch-btn.active-l, .ch-btn.active-r")) {
+  for (const btn of elementRefs.chButtons.querySelectorAll(".ch-btn.active-l, .ch-btn.active-r")) {
     btn.classList.remove("active-l", "active-r");
   }
   leftChannelB3 = null;
@@ -307,7 +307,7 @@ export function updateChannelNames(inputs: SnapshotInput[]): void {
   const nameMap = new Map<number, string>();
   for (const inp of inputs) nameMap.set(inp.destB3, inp.name || "");
 
-  for (const btn of els.chButtons.querySelectorAll<HTMLButtonElement>(".ch-btn")) {
+  for (const btn of elementRefs.chButtons.querySelectorAll<HTMLButtonElement>(".ch-btn")) {
     const b3 = Number(btn.dataset.b3);
     const b3r = btn.dataset.b3r ? Number(btn.dataset.b3r) : null;
 
@@ -335,30 +335,30 @@ export function reset(): void {
   activeSourceB3 = 0x68;
   leftChannelB3 = null;
   rightChannelB3 = null;
-  els.mainlrBtn.classList.add("active");
+  elementRefs.mainlrBtn.classList.add("active");
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
 
-els.monLDest.addEventListener("change", async () => {
+elementRefs.monLDest.addEventListener("change", async () => {
   // Auto-select the neighboring (channel+1) output for the right side.
-  const [destTypeHex, chStr] = els.monLDest.value.split(":");
+  const [destTypeHex, chStr] = elementRefs.monLDest.value.split(":");
   const neighborVal = `${destTypeHex}:${Number(chStr) + 1}`;
-  if ([...els.monRDest.options].some((o) => o.value === neighborVal)) {
-    els.monRDest.value = neighborVal;
+  if ([...elementRefs.monRDest.options].some((o) => o.value === neighborVal)) {
+    elementRefs.monRDest.value = neighborVal;
   }
   // Re-route the active source to the new L output.
   await routeActiveSelection();
 });
-els.monRDest.addEventListener("change", () => routeActiveSelection());
+elementRefs.monRDest.addEventListener("change", () => routeActiveSelection());
 
 // Enabling "Применять" immediately routes the current selection.
-els.monEnable.addEventListener("change", () => {
+elementRefs.monEnable.addEventListener("change", () => {
   if (monEnabled()) routeActiveSelection();
 });
 
 // Main LR button — routes Main LR like a mix selection
-els.mainlrBtn.addEventListener("click", () => toggleMixRoute(0x68, els.mainlrBtn));
+elementRefs.mainlrBtn.addEventListener("click", () => toggleMixRoute(0x68, elementRefs.mainlrBtn));
 
 // ── arrow key navigation (left/right) ────────────────────────────────
 // If a channel is active → arrows cycle through channels only.
@@ -366,14 +366,14 @@ els.mainlrBtn.addEventListener("click", () => toggleMixRoute(0x68, els.mainlrBtn
 // Main LR and nothing-selected → arrows do nothing.
 
 window.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (els.viewMonitor.hidden) return;
+  if (elementRefs.viewMonitor.hidden) return;
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
 
   e.preventDefault();
 
-  const channelBtns = [...els.chButtons.querySelectorAll<HTMLButtonElement>(".ch-btn")];
-  const mixBtns = [...els.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")];
+  const channelBtns = [...elementRefs.chButtons.querySelectorAll<HTMLButtonElement>(".ch-btn")];
+  const mixBtns = [...elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")];
 
   // Determine active group: channels or mixes
   let group: HTMLButtonElement[];
@@ -409,7 +409,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
 // ── number keys 1-9 → Mix 1-9, 0 → Mix 10 ────────────────────────────
 
 window.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (els.viewMonitor.hidden) return;
+  if (elementRefs.viewMonitor.hidden) return;
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
 
   const num = parseInt(e.key, 10);
@@ -419,7 +419,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   const mixNum = num === 0 ? 10 : num;
   if (mixNum < 1 || mixNum > 12) return;
 
-  const mixBtns = [...els.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")];
+  const mixBtns = [...elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")];
   const btn = mixBtns[mixNum - 1];
   if (btn) {
     e.preventDefault();
@@ -434,7 +434,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
 // ── ESC: disable monitor + clear all selections ─────────────────────
 
 window.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (els.viewMonitor.hidden) return;
+  if (elementRefs.viewMonitor.hidden) return;
   if (e.key !== "Escape") return;
   if (!monEnabled()) return;
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
@@ -444,8 +444,8 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // outputs keep the last selected source.
   clearActiveMix();
   clearChannelSelection();
-  els.mainlrBtn.classList.remove("active");
+  elementRefs.mainlrBtn.classList.remove("active");
 
   // Uncheck the enable checkbox
-  els.monEnable.checked = false;
+  elementRefs.monEnable.checked = false;
 });

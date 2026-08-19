@@ -6,7 +6,7 @@
 import "./types";
 import "./dashboard";
 import "./connect";
-import { els, getRecent, renderRecent } from "./utils";
+import { elementRefs, getRecent, renderRecent } from "./utils";
 
 window.addEventListener("error", (e) => {
   // eslint-disable-next-line no-console
@@ -16,6 +16,6 @@ window.addEventListener("error", (e) => {
 renderRecent();
 const recent = getRecent();
 if (recent.length) {
-  els.ip.value = recent[0];
+  elementRefs.ip.value = recent[0];
 }
-els.ip.focus();
+elementRefs.ip.focus();

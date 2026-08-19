@@ -3,7 +3,7 @@
  * Active Patching, editable Input Patching (A/B presets), Upload/Download,
  * sync scroll, and the save/load routing modals.
  */
-import { els, state, escapeHtml, flashTitle, todayStr } from "../../utils";
+import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../utils";
 import { buildChannelButtons } from "../monitor";
 import type { SnapshotInput, SnapshotPayload } from "../../../shared/ipc";
 import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";
@@ -64,12 +64,12 @@ function formatSourceChannel(patch: SnapshotInput): string {
 export function renderInputs(inputs: SnapshotInput[]): void {
   state.activeInputs = inputs;
   const merged = mergeStereoInputs(inputs, state.stereoPairs);
-  els.inputTbody.innerHTML = "";
+  elementRefs.inputTbody.innerHTML = "";
   if (!merged.length) {
-    els.inEmpty.hidden = false;
+    elementRefs.inEmpty.hidden = false;
     return;
   }
-  els.inEmpty.hidden = true;
+  elementRefs.inEmpty.hidden = true;
   const frag = document.createDocumentFragment();
   for (const r of merged) {
     const tr = document.createElement("tr");
@@ -83,7 +83,7 @@ export function renderInputs(inputs: SnapshotInput[]): void {
       `<td>${escapeHtml(inLabel)}</td>`;
     frag.appendChild(tr);
   }
-  els.inputTbody.appendChild(frag);
+  elementRefs.inputTbody.appendChild(frag);
   updateTransferButtons();
 }
 
@@ -186,15 +186,15 @@ function captureEditSet(): SavedSet {
 
 /** Reflect the active list on the A/B buttons and the panel title. */
 function updateAbButtons(): void {
-  els.abBtn.classList.toggle("active", activeEditSet === "A");
-  els.bBtn.classList.toggle("active", activeEditSet === "B");
-  els.inputPatchingTitle.innerHTML =
+  elementRefs.abBtn.classList.toggle("active", activeEditSet === "A");
+  elementRefs.bBtn.classList.toggle("active", activeEditSet === "B");
+  elementRefs.inputPatchingTitle.innerHTML =
     `Input Patching · <span class="list-letter list-${activeEditSet.toLowerCase()}">${activeEditSet}</span>`;
 }
 
 /** Mark the Active Patching title with the list uploaded last, if any. */
 function updateActivePatchingTitle(): void {
-  els.activePatchingTitle.innerHTML = lastUploadedSet
+  elementRefs.activePatchingTitle.innerHTML = lastUploadedSet
     ? `Active Patching · <span class="list-letter list-${lastUploadedSet.toLowerCase()}">${lastUploadedSet}</span>`
     : "Active Patching";
 }
@@ -219,13 +219,13 @@ function switchEditSet(target: "A" | "B"): void {
 /** Build the full editable input-patching table from a snapshot. */
 function buildEditInputs(inputs: PatchInput[], pairs: number[][]): void {
   const merged = mergeStereoInputs(inputs, pairs || []);
-  els.editInputTbody.innerHTML = "";
+  elementRefs.editInputTbody.innerHTML = "";
   if (!merged.length) {
-    els.editInEmpty.hidden = false;
+    elementRefs.editInEmpty.hidden = false;
     editInputsBuilt = false;
     return;
   }
-  els.editInEmpty.hidden = true;
+  elementRefs.editInEmpty.hidden = true;
   const frag = document.createDocumentFragment();
   for (const r of merged) {
     const tr = document.createElement("tr");
@@ -295,7 +295,7 @@ function buildEditInputs(inputs: PatchInput[], pairs: number[][]): void {
 
     frag.appendChild(tr);
   }
-  els.editInputTbody.appendChild(frag);
+  elementRefs.editInputTbody.appendChild(frag);
   editInputsBuilt = true;
   updateTransferButtons();
 }
@@ -313,7 +313,7 @@ export function syncEditInputs(inputs: SnapshotInput[], pairs: number[][]): void
   }
   const merged = mergeStereoInputs(inputs, pairs || []);
   for (const r of merged) {
-    const tr = els.editInputTbody.querySelector(`tr[data-b3="${r.destB3}"]`);
+    const tr = elementRefs.editInputTbody.querySelector(`tr[data-b3="${r.destB3}"]`);
     if (!tr) continue;
     const nameEl = tr.querySelector(".edit-name");
     if (nameEl) nameEl.textContent = r.name || "—";
@@ -341,7 +341,7 @@ export function syncEditInputs(inputs: SnapshotInput[], pairs: number[][]): void
  */
 function readEditTable(): Map<number, { source: number; sourceChannel: number }> {
   const map = new Map<number, { source: number; sourceChannel: number }>();
-  for (const tr of els.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
+  for (const tr of elementRefs.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
     const destB3 = Number(tr.dataset.b3);
     const srcSel = tr.querySelector<HTMLSelectElement>(".source-sel");
     const inSel = tr.querySelector<HTMLSelectElement>(".input-sel");
@@ -375,7 +375,7 @@ function listsEqual(): boolean {
 /** Read the stereo pairs currently shown in the Input Patching table. */
 function readEditStereoPairs(): number[][] {
   const pairs: number[][] = [];
-  for (const tr of els.editInputTbody.querySelectorAll<HTMLTableRowElement>('tr[data-stereo="1"]')) {
+  for (const tr of elementRefs.editInputTbody.querySelectorAll<HTMLTableRowElement>('tr[data-stereo="1"]')) {
     const l = Number(tr.dataset.b3);
     const r = Number(tr.dataset.b3r);
     if (r >= 0) pairs.push([l, r]);
@@ -390,32 +390,32 @@ function updateTransferButtons(): void {
   // differs from the console's current stereo pairs — patching would be wrong.
   const stereoDiffers =
     stereoConfigKey(readEditStereoPairs()) !== stereoConfigKey(state.stereoPairs);
-  if (els.uploadBtn) els.uploadBtn.disabled = equal || stereoDiffers;
-  if (els.downloadBtn) els.downloadBtn.disabled = equal;
+  if (elementRefs.uploadBtn) elementRefs.uploadBtn.disabled = equal || stereoDiffers;
+  if (elementRefs.downloadBtn) elementRefs.downloadBtn.disabled = equal;
   updateTransferTooltips(equal, stereoDiffers);
   // Red-highlight the Input Patching title and add a hover tooltip while the
   // editable table's stereo layout differs from the console's.
-  if (els.inputPatchingTitle) {
+  if (elementRefs.inputPatchingTitle) {
     if (stereoDiffers) {
-      els.inputPatchingTitle.classList.add("stereo-diff");
-      els.inputPatchingTitle.dataset.tooltip =
+      elementRefs.inputPatchingTitle.classList.add("stereo-diff");
+      elementRefs.inputPatchingTitle.dataset.tooltip =
         "Конфигурации стерео-каналов различаются";
     } else {
-      els.inputPatchingTitle.classList.remove("stereo-diff");
-      delete els.inputPatchingTitle.dataset.tooltip;
+      elementRefs.inputPatchingTitle.classList.remove("stereo-diff");
+      delete elementRefs.inputPatchingTitle.dataset.tooltip;
     }
   }
 }
 
 /** Explain why the transfer buttons are disabled via their tooltips. */
 function updateTransferTooltips(equal: boolean, stereoDiffers: boolean): void {
-  if (els.downloadBtn) {
-    els.downloadBtn.dataset.tooltip = equal
+  if (elementRefs.downloadBtn) {
+    elementRefs.downloadBtn.dataset.tooltip = equal
       ? "Уже загружено"
       : "Download — перенести с пульта";
   }
-  if (els.uploadBtn) {
-    els.uploadBtn.dataset.tooltip = stereoDiffers
+  if (elementRefs.uploadBtn) {
+    elementRefs.uploadBtn.dataset.tooltip = stereoDiffers
       ? "Разная конфигурация каналов"
       : equal
         ? "Уже загружено"
@@ -448,31 +448,31 @@ function addSavedRouting(entry: SavedRoutingEntry): void {
 }
 
 function openSaveModal(): void {
-  els.saveNameInput.value = defaultSaveName();
-  els.saveModal.hidden = false;
+  elementRefs.saveNameInput.value = defaultSaveName();
+  elementRefs.saveModal.hidden = false;
   // Pre-select the prefilled text so the user can quickly overwrite or keep it.
-  els.saveNameInput.focus();
-  els.saveNameInput.select();
+  elementRefs.saveNameInput.focus();
+  elementRefs.saveNameInput.select();
 }
 
 function closeSaveModal(): void {
-  els.saveModal.hidden = true;
+  elementRefs.saveModal.hidden = true;
 }
 
 function showSaveFeedback(text: string, prefix = "✓ Сохранено: "): void {
   if (saveFeedbackTimer) clearTimeout(saveFeedbackTimer);
-  els.saveFeedback.textContent = prefix + text;
-  els.saveFeedback.classList.add("show");
+  elementRefs.saveFeedback.textContent = prefix + text;
+  elementRefs.saveFeedback.classList.add("show");
   saveFeedbackTimer = setTimeout(() => {
-    els.saveFeedback.classList.remove("show");
+    elementRefs.saveFeedback.classList.remove("show");
     saveFeedbackTimer = null;
   }, 3500);
 }
 
 async function confirmSaveRouting(): Promise<void> {
-  const name = els.saveNameInput.value.trim();
+  const name = elementRefs.saveNameInput.value.trim();
   if (!name) {
-    els.saveNameInput.focus();
+    elementRefs.saveNameInput.focus();
     return;
   }
   let snapshot: SnapshotPayload | null = null;
@@ -485,7 +485,7 @@ async function confirmSaveRouting(): Promise<void> {
   addSavedRouting({
     name,
     savedAt: new Date().toISOString(),
-    model: els.topbarTitle.textContent || undefined,
+    model: elementRefs.topbarTitle.textContent || undefined,
     inputs: readEditInputs(),
     // The saved routing carries the active list's own stereo layout; fall back
     // to the console config when the table is empty.
@@ -501,7 +501,7 @@ async function confirmSaveRouting(): Promise<void> {
  */
 function readEditInputs(): EditRow[] {
   const inputs: EditRow[] = [];
-  for (const tr of els.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
+  for (const tr of elementRefs.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
     const destB3 = Number(tr.dataset.b3);
     const srcSel = tr.querySelector<HTMLSelectElement>(".source-sel");
     const inSel = tr.querySelector<HTMLSelectElement>(".input-sel");
@@ -543,7 +543,7 @@ function stereoConfigKey(pairs?: number[][] | null): string {
 }
 
 function configDiffers(entry: SavedRoutingEntry): boolean {
-  const currentModel = (state.modelSpec && state.modelSpec.name) || els.topbarTitle.textContent || "";
+  const currentModel = (state.modelSpec && state.modelSpec.name) || elementRefs.topbarTitle.textContent || "";
   const modelDiffers = Boolean(entry.model) && Boolean(currentModel) && entry.model !== currentModel;
   const stereoDiffers = stereoConfigKey(entry.stereoPairs) !== stereoConfigKey(state.stereoPairs);
   return modelDiffers || stereoDiffers;
@@ -569,14 +569,14 @@ function removeSavedRouting(index: number): void {
 
 function renderLoadList(): void {
   const list = getSavedRouting();
-  els.loadList.innerHTML = "";
+  elementRefs.loadList.innerHTML = "";
   if (!list.length) {
-    els.loadEmpty.hidden = false;
+    elementRefs.loadEmpty.hidden = false;
     selectedLoadIndex = -1;
     updateLoadConfirmState();
     return;
   }
-  els.loadEmpty.hidden = true;
+  elementRefs.loadEmpty.hidden = true;
   const frag = document.createDocumentFragment();
   list.forEach((entry, i) => {
     const row = document.createElement("div");
@@ -626,7 +626,7 @@ function renderLoadList(): void {
     });
     frag.appendChild(row);
   });
-  els.loadList.appendChild(frag);
+  elementRefs.loadList.appendChild(frag);
   updateLoadConfirmState();
 }
 
@@ -639,20 +639,20 @@ function updateLoadConfirmState(): void {
   const list = getSavedRouting();
   const entry = selectedLoadIndex >= 0 ? list[selectedLoadIndex] : null;
   if (!entry) {
-    els.loadIgnoreConfig.hidden = true;
-    els.loadIgnoreConfigInput.checked = false;
-    els.loadConfirmBtn.disabled = true;
+    elementRefs.loadIgnoreConfig.hidden = true;
+    elementRefs.loadIgnoreConfigInput.checked = false;
+    elementRefs.loadConfirmBtn.disabled = true;
     return;
   }
   const differs = configDiffers(entry);
-  els.loadIgnoreConfig.hidden = !differs;
-  if (!differs) els.loadIgnoreConfigInput.checked = false;
-  els.loadConfirmBtn.disabled = differs && !els.loadIgnoreConfigInput.checked;
+  elementRefs.loadIgnoreConfig.hidden = !differs;
+  if (!differs) elementRefs.loadIgnoreConfigInput.checked = false;
+  elementRefs.loadConfirmBtn.disabled = differs && !elementRefs.loadIgnoreConfigInput.checked;
 }
 
 function selectLoadRow(i: number): void {
   selectedLoadIndex = i;
-  for (const row of els.loadList.querySelectorAll<HTMLElement>(".load-row")) {
+  for (const row of elementRefs.loadList.querySelectorAll<HTMLElement>(".load-row")) {
     row.classList.toggle("selected", Number(row.dataset.index) === i);
   }
   updateLoadConfirmState();
@@ -661,11 +661,11 @@ function selectLoadRow(i: number): void {
 function openLoadModal(): void {
   selectedLoadIndex = -1;
   renderLoadList();
-  els.loadModal.hidden = false;
+  elementRefs.loadModal.hidden = false;
 }
 
 function closeLoadModal(): void {
-  els.loadModal.hidden = true;
+  elementRefs.loadModal.hidden = true;
 }
 
 async function confirmLoadRouting(): Promise<void> {
@@ -673,8 +673,8 @@ async function confirmLoadRouting(): Promise<void> {
   const entry = list[selectedLoadIndex];
   // Block direct invocation (e.g. dblclick) unless compatible or the
   // ignore-config checkbox is checked.
-  if (!entry || (configDiffers(entry) && !els.loadIgnoreConfigInput.checked)) return;
-  els.loadConfirmBtn.disabled = true;
+  if (!entry || (configDiffers(entry) && !elementRefs.loadIgnoreConfigInput.checked)) return;
+  elementRefs.loadConfirmBtn.disabled = true;
   try {
     // Load the saved patch list into the currently active INPUT PATCHING list
     // only — nothing is sent to the console. The user can then apply it via
@@ -696,12 +696,12 @@ async function confirmLoadRouting(): Promise<void> {
 
 /** Make the "Active Patching" title blink green once. */
 function flashActivePatching(): void {
-  flashTitle(els.activePatchingTitle);
+  flashTitle(elementRefs.activePatchingTitle);
 }
 
 /** Make the "Input Patching" title blink green once. */
 function flashInputPatching(): void {
-  flashTitle(els.inputPatchingTitle);
+  flashTitle(elementRefs.inputPatchingTitle);
 }
 
 /**
@@ -710,9 +710,9 @@ function flashInputPatching(): void {
  * R → N+1).
  */
 async function uploadInputPatching(): Promise<void> {
-  const rows = els.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]");
+  const rows = elementRefs.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]");
   if (!rows.length) return;
-  els.uploadBtn.disabled = true;
+  elementRefs.uploadBtn.disabled = true;
   let sent = 0;
   try {
     for (const tr of rows) {
@@ -740,7 +740,7 @@ async function uploadInputPatching(): Promise<void> {
   } catch (err) {
     showSaveFeedback(`Upload: ошибка — ${(err && (err as Error).message) || String(err)}`, "");
   } finally {
-    els.uploadBtn.disabled = false;
+    elementRefs.uploadBtn.disabled = false;
     updateTransferButtons();
   }
 }
@@ -750,7 +750,7 @@ async function uploadInputPatching(): Promise<void> {
  * table to match the Active Patching list.
  */
 async function downloadInputPatching(): Promise<void> {
-  els.downloadBtn.disabled = true;
+  elementRefs.downloadBtn.disabled = true;
   try {
     const snapshot = await window.sq.getSnapshot();
     buildEditInputs(snapshot.inputs, snapshot.stereoPairs || []);
@@ -761,7 +761,7 @@ async function downloadInputPatching(): Promise<void> {
   } catch (err) {
     showSaveFeedback(`Download: ошибка — ${(err && (err as Error).message) || String(err)}`, "");
   } finally {
-    els.downloadBtn.disabled = false;
+    elementRefs.downloadBtn.disabled = false;
     updateTransferButtons();
   }
 }
@@ -820,67 +820,67 @@ export function reset(): void {
   lastUploadedSet = null;
   updateActivePatchingTitle();
   state.activeInputs = [];
-  els.editInputTbody.innerHTML = "";
-  if (els.uploadBtn) els.uploadBtn.disabled = false;
-  if (els.downloadBtn) els.downloadBtn.disabled = false;
+  elementRefs.editInputTbody.innerHTML = "";
+  if (elementRefs.uploadBtn) elementRefs.uploadBtn.disabled = false;
+  if (elementRefs.downloadBtn) elementRefs.downloadBtn.disabled = false;
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
 
 // save-routing modal
-els.saveRoutingBtn.addEventListener("click", openSaveModal);
-els.saveConfirmBtn.addEventListener("click", confirmSaveRouting);
-els.saveCancelBtn.addEventListener("click", closeSaveModal);
-els.saveNameInput.addEventListener("keydown", (e: KeyboardEvent) => {
+elementRefs.saveRoutingBtn.addEventListener("click", openSaveModal);
+elementRefs.saveConfirmBtn.addEventListener("click", confirmSaveRouting);
+elementRefs.saveCancelBtn.addEventListener("click", closeSaveModal);
+elementRefs.saveNameInput.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Enter") {
     e.preventDefault();
     confirmSaveRouting();
   }
 });
 // Click on the overlay backdrop (outside the card) closes the modal.
-els.saveModal.addEventListener("click", (e: MouseEvent) => {
-  if (e.target === els.saveModal) closeSaveModal();
+elementRefs.saveModal.addEventListener("click", (e: MouseEvent) => {
+  if (e.target === elementRefs.saveModal) closeSaveModal();
 });
 // Esc closes the modal (separate from the monitor-view Esc handler).
 window.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (!els.saveModal.hidden && e.key === "Escape") {
+  if (!elementRefs.saveModal.hidden && e.key === "Escape") {
     e.preventDefault();
     closeSaveModal();
   }
 });
 
 // load-routing modal
-els.loadRoutingBtn.addEventListener("click", openLoadModal);
-els.loadConfirmBtn.addEventListener("click", confirmLoadRouting);
-els.loadCancelBtn.addEventListener("click", closeLoadModal);
-els.loadIgnoreConfigInput.addEventListener("change", updateLoadConfirmState);
-els.loadModal.addEventListener("click", (e: MouseEvent) => {
-  if (e.target === els.loadModal) closeLoadModal();
+elementRefs.loadRoutingBtn.addEventListener("click", openLoadModal);
+elementRefs.loadConfirmBtn.addEventListener("click", confirmLoadRouting);
+elementRefs.loadCancelBtn.addEventListener("click", closeLoadModal);
+elementRefs.loadIgnoreConfigInput.addEventListener("change", updateLoadConfirmState);
+elementRefs.loadModal.addEventListener("click", (e: MouseEvent) => {
+  if (e.target === elementRefs.loadModal) closeLoadModal();
 });
 window.addEventListener("keydown", (e: KeyboardEvent) => {
-  if (!els.loadModal.hidden && e.key === "Escape") {
+  if (!elementRefs.loadModal.hidden && e.key === "Escape") {
     e.preventDefault();
     closeLoadModal();
   }
 });
 
 // Upload / Download / A/B / sync scroll
-els.uploadBtn.addEventListener("click", uploadInputPatching);
-els.downloadBtn.addEventListener("click", downloadInputPatching);
-els.abBtn.addEventListener("click", () => switchEditSet("A"));
-els.bBtn.addEventListener("click", () => switchEditSet("B"));
-els.syncScrollBtn.addEventListener("click", () => {
+elementRefs.uploadBtn.addEventListener("click", uploadInputPatching);
+elementRefs.downloadBtn.addEventListener("click", downloadInputPatching);
+elementRefs.abBtn.addEventListener("click", () => switchEditSet("A"));
+elementRefs.bBtn.addEventListener("click", () => switchEditSet("B"));
+elementRefs.syncScrollBtn.addEventListener("click", () => {
   syncScrollEnabled = !syncScrollEnabled;
-  els.syncScrollBtn.classList.toggle("active", syncScrollEnabled);
-  els.syncScrollBtn.setAttribute("aria-pressed", String(syncScrollEnabled));
+  elementRefs.syncScrollBtn.classList.toggle("active", syncScrollEnabled);
+  elementRefs.syncScrollBtn.setAttribute("aria-pressed", String(syncScrollEnabled));
   if (syncScrollEnabled) {
     // Align both lists immediately on enable.
-    mirrorScroll(els.editTableWrap, els.activeTableWrap);
+    mirrorScroll(elementRefs.editTableWrap, elementRefs.activeTableWrap);
   }
 });
-els.editTableWrap.addEventListener("scroll", () =>
-  mirrorScroll(els.editTableWrap, els.activeTableWrap)
+elementRefs.editTableWrap.addEventListener("scroll", () =>
+  mirrorScroll(elementRefs.editTableWrap, elementRefs.activeTableWrap)
 );
-els.activeTableWrap.addEventListener("scroll", () =>
-  mirrorScroll(els.activeTableWrap, els.editTableWrap)
+elementRefs.activeTableWrap.addEventListener("scroll", () =>
+  mirrorScroll(elementRefs.activeTableWrap, elementRefs.editTableWrap)
 );

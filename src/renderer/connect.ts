@@ -2,7 +2,7 @@
  * SQ Router Control — connection screen.
  * Connect / demo / disconnect / refresh flows.
  */
-import { els, state, addRecent, isValidHost, setLoading, setMsg, showScreen, updateSceneHint } from "./utils";
+import { elementRefs, state, addRecent, isValidHost, setLoading, setMsg, showScreen, updateSceneHint } from "./utils";
 import { renderInputs, syncEditInputs } from "./tabs/routing";
 import { updateStat } from "./tabs/log";
 import { enterDashboard } from "./dashboard";
@@ -12,7 +12,7 @@ let demoStarting = false;
 export async function doStartDemo(): Promise<void> {
   if (demoStarting) return;
   demoStarting = true;
-  els.demoBtn.disabled = true;
+  elementRefs.demoBtn.disabled = true;
   setMsg("", "");
   try {
     const res = await window.sq.startDemo();
@@ -31,12 +31,12 @@ export async function doStartDemo(): Promise<void> {
 }
 
 export async function doConnect(): Promise<void> {
-  const host = els.ip.value.trim();
-  const port = Number(els.port.value) || undefined;
+  const host = elementRefs.ip.value.trim();
+  const port = Number(elementRefs.port.value) || undefined;
 
   if (!isValidHost(host)) {
     setMsg("Введите корректный IP-адрес или имя хоста.", "error");
-    els.ip.focus();
+    elementRefs.ip.focus();
     return;
   }
 
@@ -63,7 +63,7 @@ export async function doConnect(): Promise<void> {
 export async function doDisconnect(): Promise<void> {
   await window.sq.disconnect();
   setMsg("", "");
-  els.ip.value = "";
+  elementRefs.ip.value = "";
   showScreen("connect");
 }
 
@@ -83,17 +83,17 @@ export async function doRefresh(): Promise<void> {
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
-els.connectBtn.addEventListener("click", doConnect);
-els.demoBtn.addEventListener("click", doStartDemo);
-els.ip.addEventListener("keydown", (e: KeyboardEvent) => {
+elementRefs.connectBtn.addEventListener("click", doConnect);
+elementRefs.demoBtn.addEventListener("click", doStartDemo);
+elementRefs.ip.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Enter") doConnect();
 });
-els.port.addEventListener("keydown", (e: KeyboardEvent) => {
+elementRefs.port.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Enter") doConnect();
 });
-els.disconnectBtn.addEventListener("click", doDisconnect);
-els.requestBtn.addEventListener("click", async () => {
-  els.requestBtn.disabled = true;
+elementRefs.disconnectBtn.addEventListener("click", doDisconnect);
+elementRefs.requestBtn.addEventListener("click", async () => {
+  elementRefs.requestBtn.disabled = true;
   try {
     if (state.isDemoMode) {
       // Demo: regenerate a completely new simulated routing.
@@ -103,6 +103,6 @@ els.requestBtn.addEventListener("click", async () => {
       await window.sq.requestDump();
     }
   } finally {
-    setTimeout(() => (els.requestBtn.disabled = false), 600);
+    setTimeout(() => (elementRefs.requestBtn.disabled = false), 600);
   }
 });

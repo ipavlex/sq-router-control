@@ -2,7 +2,7 @@
  * SQ Router Control — Log tab.
  * Frame/event log and the routing update stat.
  */
-import { els, escapeHtml, fmtTime } from "../../utils";
+import { elementRefs, escapeHtml, fmtTime } from "../../utils";
 import type { LogLevel, SnapshotPayload } from "../../../shared/ipc";
 
 let logLineCount = 0;
@@ -15,19 +15,19 @@ export function pushLog(level: LogLevel, msg: string): void {
     `<span class="ts">${fmtTime()}</span>` +
     `<span class="lvl ${level}">${level.toUpperCase()}</span>` +
     `<span class="msg">${escapeHtml(msg)}</span>`;
-  els.log.appendChild(line);
+  elementRefs.log.appendChild(line);
   logLineCount++;
   while (logLineCount > MAX_LOG_LINES) {
-    if (els.log.firstChild) els.log.removeChild(els.log.firstChild);
+    if (elementRefs.log.firstChild) elementRefs.log.removeChild(elementRefs.log.firstChild);
     logLineCount--;
   }
-  els.log.scrollTop = els.log.scrollHeight;
+  elementRefs.log.scrollTop = elementRefs.log.scrollHeight;
 }
 
 export function clear(): void {
-  els.log.innerHTML = "";
+  elementRefs.log.innerHTML = "";
   logLineCount = 0;
-  els.updateStat.textContent = "";
+  elementRefs.updateStat.textContent = "";
 }
 
 /** Show routing update counters in the log panel header. */
@@ -35,7 +35,7 @@ export function updateStat(snapshot: SnapshotPayload): void {
   const parts: string[] = [];
   parts.push(`обновлений: ${snapshot.updates}`);
   if (snapshot.routingBlockBytes) parts.push(`routing block: ${snapshot.routingBlockBytes} B`);
-  els.updateStat.textContent = parts.join(" · ");
+  elementRefs.updateStat.textContent = parts.join(" · ");
 }
 
-els.clearLog.addEventListener("click", clear);
+elementRefs.clearLog.addEventListener("click", clear);
