@@ -8,6 +8,7 @@
  */
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
+const HtmlFromTabsPlugin = require("./webpack/html-from-tabs-plugin");
 
 const common = {
   resolve: {
@@ -62,9 +63,18 @@ module.exports = [
       filename: "renderer.js",
     },
     plugins: [
+      new HtmlFromTabsPlugin({
+        template: path.resolve(__dirname, "src/renderer/index.template.html"),
+        fragments: [
+          { name: "routing", file: path.resolve(__dirname, "src/renderer/tabs/routing/view.html") },
+          { name: "log", file: path.resolve(__dirname, "src/renderer/tabs/log/view.html") },
+          { name: "monitor", file: path.resolve(__dirname, "src/renderer/tabs/monitor/view.html") },
+          { name: "routing-modals", file: path.resolve(__dirname, "src/renderer/tabs/routing/modals.html") },
+        ],
+        output: "index.html",
+      }),
       new CopyPlugin({
         patterns: [
-          { from: "src/renderer/index.html", to: "index.html" },
           { from: "src/renderer/styles.css", to: "styles.css" },
         ],
       }),

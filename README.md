@@ -87,21 +87,23 @@ src/
 ├── shared/
 │   └── ipc.ts             # общие типы IPC и интерфейс window.sq
 └── renderer/              # UI (TypeScript, без фреймворков)
-    ├── index.html
+    ├── index.template.html # каркас страницы с плейсхолдерами вкладок
     ├── styles.css
-    ├── types.ts           # типы рендерера (window.sq, Els, RendererState)
+    ├── types.ts           # типы рендерера (window.sq, ElementRefs, RendererState)
     ├── utils.ts           # DOM-элементы, состояние, хелперы
     ├── connect.ts         # экран подключения
     ├── dashboard.ts       # дашборд, подписки на события пульта
     ├── renderer.ts        # точка входа (webpack)
     └── tabs/              # вкладки — по одной на папку
-        ├── routing/       # вкладка «Роутинг» (types.ts рядом)
-        ├── monitor/       # вкладка «Монитор» (types.ts рядом)
-        └── log/           # вкладка «Журнал»
+        ├── routing/       # вкладка «Роутинг» (types.ts, view.html, modals.html)
+        ├── monitor/       # вкладка «Монитор» (types.ts, view.html)
+        └── log/           # вкладка «Журнал» (view.html)
 ```
 
 Сборка: webpack (`webpack.config.js`) собирает main, preload и renderer в
-`dist/`; типы проверяются отдельно через `tsc --noEmit`.
+`dist/`; `index.html` генерируется плагином `HtmlFromTabsPlugin` из
+`index.template.html` и HTML-фрагментов вкладок (`view.html` / `modals.html`);
+типы проверяются отдельно через `tsc --noEmit`.
 
 ## Протокол (кратко)
 

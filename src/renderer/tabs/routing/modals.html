@@ -1,0 +1,37 @@
+<!-- ── Save-routing modal ────────────────────────────────────────── -->
+<div id="save-modal" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <h3 class="modal-title">Сохранить текущий роутинг</h3>
+    <input
+      id="save-name-input"
+      class="save-name-input"
+      type="text"
+      maxlength="64"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <div class="modal-actions">
+      <button id="save-cancel-btn" type="button" class="btn ghost">Отмена</button>
+      <button id="save-confirm-btn" type="button" class="btn primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Load-routing modal ────────────────────────────────────────── -->
+<div id="load-modal" class="modal-overlay" hidden>
+  <div class="modal-card modal-card-wide">
+    <h3 class="modal-title">Загрузить роутинг</h3>
+    <div id="load-list" class="load-list"></div>
+    <div id="load-empty" class="empty" hidden>Нет сохранённых роутингов.</div>
+    <div class="modal-actions">
+      <label id="load-ignore-config" class="load-ignore-config" hidden>
+        <input id="load-ignore-config-input" type="checkbox" />
+        Не обращать внимание на конфигурацию
+      </label>
+      <div class="modal-actions-btns">
+        <button id="load-cancel-btn" type="button" class="btn ghost">Отмена</button>
+        <button id="load-confirm-btn" type="button" class="btn primary" disabled>Загрузить</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,74 @@
+<!-- ── View: Routing ────────────────────────────────────────────── -->
+<div id="view-routing" class="view">
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title-group">
+          <h2 id="input-patching-title">Input Patching</h2>
+          <span id="save-feedback" class="save-feedback"></span>
+        </div>
+        <div class="panel-actions">
+          <button id="save-routing-btn" type="button" class="btn ghost sm" title="Сохранить текущий роутинг пульта">💾 Сохранить</button>
+          <button id="load-routing-btn" type="button" class="btn ghost sm" title="Загрузить сохранённый роутинг в пульт">📂 Загрузить</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="edit-table-wrap">
+        <table class="route-table" id="edit-input-table">
+          <thead>
+            <tr>
+              <th>Канал</th>
+              <th>Название</th>
+              <th>Источник</th>
+              <th>Вход</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="edit-in-empty" class="empty" hidden>
+          Нет данных инпатчинга.<br />Они появятся после обновления роутинга на пульте.
+        </div>
+      </div>
+    </div>
+    <div class="patch-transfer">
+      <div class="ab-group">
+        <button id="a-btn" type="button" class="btn ghost sm ab-btn a">A</button>
+        <button id="b-btn" type="button" class="btn ghost sm ab-btn b">B</button>
+      </div>
+      <div class="transfer-arrows">
+        <button id="download-btn" type="button" class="btn ghost sm transfer-btn" data-tooltip="Download — перенести с пульта">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M11 18l-6-6 6-6"/></svg>
+        </button>
+        <button id="upload-btn" type="button" class="btn ghost sm transfer-btn" data-tooltip="Upload — перенести на пульт">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <button id="sync-scroll-btn" type="button" class="btn ghost sm transfer-btn sync-scroll-btn" data-tooltip="Синхронная прокрутка списков" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0M3 15c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0"/></svg>
+      </button>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2 id="active-patching-title">Active Patching</h2>
+        <div class="panel-actions">
+          <button id="request-btn" class="btn ghost sm" title="Запросить полный дамп роутинга у пульта">↻ Обновить</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="active-table-wrap">
+        <table class="route-table" id="input-table">
+          <thead>
+            <tr>
+              <th>Канал</th>
+              <th>Название</th>
+              <th>Источник</th>
+              <th>Вход</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="in-empty" class="empty" hidden>
+          Нет данных инпатчинга.<br />Они появятся после обновления роутинга на пульте.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

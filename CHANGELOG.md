@@ -5,6 +5,15 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.8] — 2026-08-19
+
+### Изменено
+- `index.html` теперь генерируется автоматически: каркас страницы вынесен в
+  `index.template.html`, разметка каждой вкладки — в её папку
+  (`tabs/{routing,monitor,log}/view.html`, модалки роутинга — в
+  `tabs/routing/modals.html`). Сборку выполняет webpack-плагин
+  `HtmlFromTabsPlugin` (`webpack/html-from-tabs-plugin.js`).
+
 ## [1.0.7] — 2026-08-19
 
 ### Изменено
