@@ -4,7 +4,7 @@
  * to the tab modules, and handles view switching. The renderer entry point
  * imports this module for its side effects.
  */
-import { elementRefs, state, setLoading, setMessage, showScreen, showView, updateSceneHint } from "../utils";
+import { elementRefs, state, setLoading, setMessage, showScreen, showView, updateSceneHint } from "../core/utils";
 import * as routing from "../tabs/routing";
 import * as monitor from "../tabs/monitor";
 import * as log from "../tabs/log";

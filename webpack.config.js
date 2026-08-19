@@ -64,7 +64,7 @@ module.exports = [
     },
     plugins: [
       new HtmlFromTabsPlugin({
-        template: path.resolve(__dirname, "src/renderer/index.template.html"),
+        template: path.resolve(__dirname, "src/renderer/assets/index.template.html"),
         fragments: [
           { name: "connect", file: path.resolve(__dirname, "src/renderer/connect/view.html") },
           { name: "dashboard", file: path.resolve(__dirname, "src/renderer/dashboard/view.html") },
@@ -77,7 +77,7 @@ module.exports = [
       }),
       new CopyPlugin({
         patterns: [
-          { from: "src/renderer/styles.css", to: "styles.css" },
+          { from: "src/renderer/assets/styles.css", to: "styles.css" },
         ],
       }),
     ],

@@ -2,7 +2,7 @@
  * Renderer-side type declarations: the `sq` bridge exposed by the preload
  * script, plus re-exports of the shared IPC payload types.
  */
-import type { ModelSpec, SnapshotInput, SqApi } from "../shared/ipc";
+import type { ModelSpec, SnapshotInput, SqApi } from "../../shared/ipc";
 
 declare global {
   interface Window {
@@ -94,4 +94,4 @@ export type {
   LogLevel,
   VersionInfo,
   ConnectResult,
-} from "../shared/ipc";
+} from "../../shared/ipc";

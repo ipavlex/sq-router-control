@@ -2,7 +2,7 @@
  * SQ Router Control — Log tab.
  * Frame/event log and the routing update stat.
  */
-import { elementRefs, escapeHtml, fmtTime } from "../../utils";
+import { elementRefs, escapeHtml, fmtTime } from "../../core/utils";
 import type { LogLevel, SnapshotPayload } from "../../../shared/ipc";
 
 let logLineCount = 0;

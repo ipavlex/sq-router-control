@@ -3,7 +3,7 @@
  * Active Patching, editable Input Patching (A/B presets), Upload/Download,
  * sync scroll, and the save/load routing modals.
  */
-import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../utils";
+import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../core/utils";
 import { buildChannelButtons } from "../monitor";
 import type { SnapshotInput, SnapshotPayload } from "../../../shared/ipc";
 import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";

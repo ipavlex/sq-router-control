@@ -3,7 +3,7 @@
  * L/R output selectors, mix / channel / Main LR routing into the selected
  * outputs, and the keyboard navigation.
  */
-import { elementRefs, state } from "../../utils";
+import { elementRefs, state } from "../../core/utils";
 import type { SnapshotInput } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 

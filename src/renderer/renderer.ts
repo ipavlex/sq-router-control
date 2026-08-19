@@ -3,10 +3,10 @@
  * Importing the tab modules runs their top-level wiring (DOM bindings and
  * IPC subscriptions); this module then boots the connection screen.
  */
-import "./types";
+import "./core/types";
 import "./dashboard";
 import "./connect";
-import { elementRefs, getRecent, renderRecent } from "./utils";
+import { elementRefs, getRecent, renderRecent } from "./core/utils";
 
 window.addEventListener("error", (e) => {
   // eslint-disable-next-line no-console

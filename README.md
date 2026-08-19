@@ -87,10 +87,8 @@ src/
 ├── shared/
 │   └── ipc.ts             # общие типы IPC и интерфейс window.sq
 └── renderer/              # UI (TypeScript, без фреймворков)
-    ├── index.template.html # каркас страницы с плейсхолдерами вкладок
-    ├── styles.css
-    ├── types.ts           # типы рендерера (window.sq, ElementRefs, RendererState)
-    ├── utils.ts           # DOM-элементы, состояние, хелперы
+    ├── assets/            # статика: index.template.html, styles.css
+    ├── core/              # общий код: types.ts, utils.ts
     ├── renderer.ts        # точка входа (webpack)
     ├── connect/           # экран подключения (index.ts, view.html)
     ├── dashboard/         # дашборд, события пульта, переключение вкладок (index.ts, view.html)

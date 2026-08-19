@@ -5,6 +5,13 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.11] — 2026-08-19
+
+### Изменено
+- Статика рендерера (`index.template.html`, `styles.css`) вынесена в
+  `src/renderer/assets/`, общий код (`types.ts`, `utils.ts`) — в
+  `src/renderer/core/`. Импорты обновлены через IDE-рефакторинг.
+
 ## [1.0.10] — 2026-08-19
 
 ### Изменено
