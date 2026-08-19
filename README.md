@@ -93,10 +93,11 @@ src/
     ├── utils.ts           # DOM-элементы, состояние, хелперы
     ├── connect.ts         # экран подключения
     ├── dashboard.ts       # дашборд, подписки на события пульта
-    ├── routing.ts         # вкладка «Роутинг»
-    ├── monitor.ts         # вкладка «Монитор»
-    ├── log.ts             # вкладка «Журнал»
-    └── renderer.ts        # точка входа (webpack)
+    ├── renderer.ts        # точка входа (webpack)
+    └── tabs/              # вкладки — по одной на папку
+        ├── routing/       # вкладка «Роутинг»
+        ├── monitor/       # вкладка «Монитор»
+        └── log/           # вкладка «Журнал»
 ```
 
 Сборка: webpack (`webpack.config.js`) собирает main, preload и renderer в

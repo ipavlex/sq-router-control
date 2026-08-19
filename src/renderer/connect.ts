@@ -3,8 +3,8 @@
  * Connect / demo / disconnect / refresh flows.
  */
 import { els, state, addRecent, isValidHost, setLoading, setMsg, showScreen, updateSceneHint } from "./utils";
-import { renderInputs, syncEditInputs } from "./routing";
-import { updateStat } from "./log";
+import { renderInputs, syncEditInputs } from "./tabs/routing";
+import { updateStat } from "./tabs/log";
 import { enterDashboard } from "./dashboard";
 
 let demoStarting = false;

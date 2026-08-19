@@ -3,8 +3,8 @@
  * L/R output selectors, mix / channel / Main LR routing into the selected
  * outputs, and the keyboard navigation.
  */
-import { els, state } from "./utils";
-import type { SnapshotInput } from "../shared/ipc";
+import { els, state } from "../../utils";
+import type { SnapshotInput } from "../../../shared/ipc";
 
 // ── output selectors ─────────────────────────────────────────────────
 

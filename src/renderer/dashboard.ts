@@ -5,9 +5,9 @@
  * imports this module for its side effects.
  */
 import { els, state, setLoading, setMsg, showScreen, showView, updateSceneHint } from "./utils";
-import * as routing from "./routing";
-import * as monitor from "./monitor";
-import * as log from "./log";
+import * as routing from "./tabs/routing";
+import * as monitor from "./tabs/monitor";
+import * as log from "./tabs/log";
 import type { LogPayload, ModelSpec, SnapshotPayload, StatusPayload, VersionInfo } from "../shared/ipc";
 
 export function enterDashboard(

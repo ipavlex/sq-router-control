@@ -2,8 +2,8 @@
  * SQ Router Control — Log tab.
  * Frame/event log and the routing update stat.
  */
-import { els, escapeHtml, fmtTime } from "./utils";
-import type { LogLevel, SnapshotPayload } from "../shared/ipc";
+import { els, escapeHtml, fmtTime } from "../../utils";
+import type { LogLevel, SnapshotPayload } from "../../../shared/ipc";
 
 let logLineCount = 0;
 const MAX_LOG_LINES = 400;

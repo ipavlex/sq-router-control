@@ -1,6 +1,6 @@
 {
   "name": "sq-router-control",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Electron app to connect to an Allen & Heath SQ mixing console and display its current routing",
   "main": "dist/main/main.js",
   "author": "",
@@ -54,8 +54,16 @@
     "dmg": {
       "title": "SQ Router Control",
       "contents": [
-        { "x": 130, "y": 220 },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "win": {

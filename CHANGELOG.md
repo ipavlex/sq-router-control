@@ -5,6 +5,12 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.3] — 2026-08-19
+
+### Изменено
+- Модули вкладок рендерера перенесены в отдельные папки
+  (`src/renderer/tabs/{routing,monitor,log}/`), импорты обновлены.
+
 ## [1.0.2] — 2026-08-19
 
 ### Изменено
