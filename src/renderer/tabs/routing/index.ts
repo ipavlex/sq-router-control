@@ -5,7 +5,7 @@
  */
 import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../core/utils";
 import { buildChannelButtons } from "../monitor";
-import type { SnapshotInput, SnapshotPayload } from "../../../shared/ipc";
+import type { SnapshotInput, SnapshotPayload, MetersPayload } from "../../../shared/ipc";
 import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";
 
 // ── stereo merge helpers ─────────────────────────────────────────────
@@ -61,6 +61,17 @@ function formatSourceChannel(patch: SnapshotInput): string {
 
 // ── Active Patching table ────────────────────────────────────────────
 
+/** HTML for the level/signal meter cell (updated in place by updateMeters). */
+function meterTdHtml(): string {
+  return (
+    `<td class="meter-cell">` +
+    `<span class="meter"><span class="meter-fill"></span></span>` +
+    `<span class="meter-db"></span>` +
+    `<span class="meter-clip" title="Перегруз (clip)"></span>` +
+    `</td>`
+  );
+}
+
 export function renderInputs(inputs: SnapshotInput[]): void {
   state.activeInputs = inputs;
   const merged = mergeStereoInputs(inputs, state.stereoPairs);
@@ -73,6 +84,11 @@ export function renderInputs(inputs: SnapshotInput[]): void {
   const frag = document.createDocumentFragment();
   for (const r of merged) {
     const tr = document.createElement("tr");
+    tr.dataset.b3 = String(r.destB3);
+    if (r._stereo) {
+      const p = stereoPairForLeft(r.destB3, state.stereoPairs);
+      tr.dataset.b3r = String(p ? p[1] : -1);
+    }
     const inLabel = r._stereo
       ? `${r.sourceChannel + 1}-${(r._rightSourceChannel ?? 0) + 1}`
       : formatSourceChannel(r);
@@ -80,11 +96,86 @@ export function renderInputs(inputs: SnapshotInput[]): void {
       `<td class="ch-cell">${escapeHtml(r.destLabel)}</td>` +
       `<td class="name-cell">${escapeHtml(r.name || "—")}</td>` +
       `<td class="src-cell">${escapeHtml(r.sourceLabel)}</td>` +
-      `<td>${escapeHtml(inLabel)}</td>`;
+      `<td>${escapeHtml(inLabel)}</td>` +
+      meterTdHtml();
     frag.appendChild(tr);
   }
   elementRefs.inputTbody.appendChild(frag);
   updateTransferButtons();
+}
+
+// ── live level meters ────────────────────────────────────────────────
+
+/** Meter bar spans this dynamic range (dBFS). */
+const METER_MIN_DB = -60;
+/** dBFS at which the bar turns amber. */
+const METER_WARN_DB = -20;
+/** dBFS at which the bar turns red. */
+const METER_HOT_DB = -6;
+
+let pendingMeters: MetersPayload | null = null;
+let meterFrame: number | null = null;
+
+/**
+ * Apply a meters payload to the DOM, coalescing the incoming stream per
+ * animation frame so 25-50 UDP packets/s never thrash the layout.
+ */
+export function updateMeters(p: MetersPayload | null): void {
+  pendingMeters = p;
+  if (meterFrame !== null) return;
+  meterFrame = requestAnimationFrame(() => {
+    meterFrame = null;
+    const m = pendingMeters;
+    pendingMeters = null;
+    applyMeters(m);
+  });
+}
+
+/** dBFS → 0..100 bar fill (null → 0). */
+function dbToPercent(db: number | null): number {
+  if (db == null) return 0;
+  const clamped = Math.max(METER_MIN_DB, Math.min(0, db));
+  return ((clamped - METER_MIN_DB) / (0 - METER_MIN_DB)) * 100;
+}
+
+function meterClassName(db: number | null): string {
+  if (db == null) return "";
+  if (db >= METER_HOT_DB) return " meter-hot";
+  if (db >= METER_WARN_DB) return " meter-warn";
+  return "";
+}
+
+function applyMeters(m: MetersPayload | null): void {
+  for (const tr of elementRefs.inputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
+      const fill = tr.querySelector<HTMLElement>(".meter-fill");
+      const dbEl = tr.querySelector<HTMLElement>(".meter-db");
+      const clipEl = tr.querySelector<HTMLElement>(".meter-clip");
+      if (!fill || !dbEl || !clipEl) continue;
+
+      let db: number | null = m ? m.inputs[Number(tr.dataset.b3)] ?? null : null;
+      let clip = false;
+      if (m) {
+        const b3r = tr.dataset.b3r ? Number(tr.dataset.b3r) : -1;
+        if (b3r >= 0) {
+          const r = m.inputs[b3r] ?? null;
+          if (db == null) db = r;
+          else if (r != null) db = Math.max(db, r);
+          clip = clip || !!m.clip[b3r];
+        }
+        clip = clip || !!m.clip[Number(tr.dataset.b3)];
+      }
+
+      fill.style.width = `${dbToPercent(db)}%`;
+      fill.className = `meter-fill${meterClassName(db)}`;
+      clipEl.classList.toggle("on", clip);
+      dbEl.textContent =
+        db != null && db >= METER_MIN_DB ? db.toFixed(1) : "";
+  }
+}
+
+/** Clear all meter bars (used on: disconnect, table rebuild). */
+export function clearMeters(): void {
+  updateMeters(null);
 }
 
 // ── editable input patching ──────────────────────────────────────────
@@ -985,6 +1076,7 @@ export function reset(): void {
   lastUploadedSet = null;
   updateActivePatchingTitle();
   state.activeInputs = [];
+  clearMeters();
   elementRefs.editInputTbody.innerHTML = "";
   elementRefs.editSelAll.checked = false;
   elementRefs.editSelAll.indeterminate = false;

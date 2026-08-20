@@ -826,6 +826,64 @@ h2.stereo-diff:hover::after {
   border-color: rgba(201, 139, 255, 0.35);
 }
 
+/* ── Live level meters ─────────────────────────────────────────────── */
+.route-table .meter-cell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.route-table .meter {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  width: 48px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.route-table .meter-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+  border-radius: 3px;
+  transition: width 0.12s linear;
+}
+
+.route-table .meter-fill.meter-warn {
+  background: linear-gradient(90deg, var(--amber), var(--red));
+}
+
+.route-table .meter-fill.meter-hot {
+  background: var(--red);
+}
+
+.route-table .meter-db {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: 6px;
+}
+
+.route-table .meter-clip {
+  display: none;
+  vertical-align: middle;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 4px;
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+
+.route-table .meter-clip.on {
+  display: inline-block;
+}
+
 /* ── Editable patch selectors ──────────────────────────────────────── */
 .patch-select {
   background: var(--bg-elev2);

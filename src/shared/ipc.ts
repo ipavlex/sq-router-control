@@ -64,6 +64,13 @@ export interface StatusPayload {
   spec?: ModelSpec;
 }
 
+export interface MetersPayload {
+  /** dBFS levels for input channels 0..47 (null = no signal / floor). */
+  inputs: (number | null)[];
+  /** true when a channel's peak is at or above 0 dBFS (clip). */
+  clip: boolean[];
+}
+
 export type LogLevel = "dsp" | "frame" | "ok" | "warn" | "error";
 
 export interface LogPayload {
@@ -93,6 +100,8 @@ export interface SqApi {
   onStatus(cb: (p: StatusPayload) => void): () => void;
   onRouting(cb: (p: SnapshotPayload) => void): () => void;
   onLog(cb: (p: LogPayload) => void): () => void;
+  /** Live input channel levels/meters. Fired from UDP at up to ~30 Hz. */
+  onMeters(cb: (p: MetersPayload) => void): () => void;
   /** Fired once the console's initial state burst has been fully received. */
   onInitialState(cb: () => void): () => void;
 }

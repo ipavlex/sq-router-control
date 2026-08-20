@@ -39,6 +39,7 @@ window.sq.onStatus((p: StatusPayload) => {
   // Keep model spec in sync in case it arrives via a status update.
   if (p.spec) state.modelSpec = p.spec;
   if (!p.connected) {
+    routing.clearMeters();
     // unexpected drop
     if (!elementRefs.dashScreen.hidden) {
       showScreen("connect");
@@ -62,6 +63,9 @@ window.sq.onInitialState(() => {
 });
 
 window.sq.onLog((p: LogPayload) => log.pushLog(p.level, p.msg));
+
+// Live input meters (UDP, ~25-50 Hz) — the routing tab coalesces per frame.
+window.sq.onMeters((p) => routing.updateMeters(p));
 
 // ── view switching (routing / log / monitor) ────────────────────────
 

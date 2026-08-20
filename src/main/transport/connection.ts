@@ -36,6 +36,7 @@ import {
 } from "./frame";
 import { BufferReader } from "./buffer";
 import { modelName } from "../models";
+import { decodeMeterMessage, resetMeters, MetersPayload } from "../meters";
 
 export const SQ_TCP_PORT = 51326;
 export const KEEPALIVE_INTERVAL_MS = 1000;
@@ -121,7 +122,11 @@ export class Connection extends EventEmitter {
       const udp = dgram.createSocket("udp4");
       this.udp = udp;
       udp.on("error", (e) => this.emit("error", e));
-      udp.on("message", (msg, rinfo) => this.emit("meterData", msg, rinfo.address));
+      udp.on("message", (msg, rinfo) => {
+        this.emit("meterData", msg, rinfo.address);
+        const meters = decodeMeterMessage(msg);
+        if (meters) this.emit("meters", meters);
+      });
 
       udp.bind(0, () => {
         this._openTcp(resolve, reject);
@@ -297,6 +302,7 @@ export class Connection extends EventEmitter {
   disconnect(): void {
     this._stopKeepalive();
     this._connected = false;
+    resetMeters();
     this.tcp?.destroy();
     this.tcp = null;
     try {

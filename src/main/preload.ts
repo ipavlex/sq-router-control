@@ -6,6 +6,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   ConnectResult,
   LogPayload,
+  MetersPayload,
   ModelSpec,
   SnapshotPayload,
   StatusPayload,
@@ -52,5 +53,11 @@ contextBridge.exposeInMainWorld("sq", {
     const h = () => cb();
     ipcRenderer.on("sq:initialState", h);
     return () => ipcRenderer.off("sq:initialState", h);
+  },
+  /** Live input channel levels/meters from the UDP meter stream. */
+  onMeters: (cb: (p: MetersPayload) => void): (() => void) => {
+    const h = (_e: unknown, p: MetersPayload) => cb(p);
+    ipcRenderer.on("sq:meters", h);
+    return () => ipcRenderer.off("sq:meters", h);
   },
 });

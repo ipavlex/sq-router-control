@@ -9,6 +9,7 @@ import * as path from "node:path";
 import { Connection, VersionInfo, DspFrame } from "./transport/connection";
 import { RoutingModel, InputPatch, OutputPatch, labelToB3, b3ToLabel, MONITOR_LABEL_TO_SOURCE, RoutingSnapshot } from "./routing";
 import { modelSpec, SQModelSpec } from "./models";
+import { MetersPayload } from "./meters";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -890,6 +891,12 @@ class SQController {
     conn.on("disconnect", () => {
       this.send("sq:status", { connected: false, host: this.host });
       this.send("sq:log", { level: "warn", msg: "Disconnected from mixer." });
+    });
+
+    // Live input meters streamed over UDP (~25-50 packets/s). The renderer
+    // coalesces them per animation frame, so forwarding each is fine.
+    conn.on("meters", (m: MetersPayload) => {
+      this.send("sq:meters", m);
     });
 
     conn.on("error", (err: Error) => {
