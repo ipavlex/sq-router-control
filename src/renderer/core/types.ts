@@ -63,6 +63,7 @@ export interface ElementRefs {
   downloadBtn: HTMLButtonElement;
   abBtn: HTMLButtonElement;
   bBtn: HTMLButtonElement;
+  abSwapBtn: HTMLButtonElement;
   activePatchingTitle: HTMLElement;
   inputPatchingTitle: HTMLElement;
   syncScrollBtn: HTMLButtonElement;

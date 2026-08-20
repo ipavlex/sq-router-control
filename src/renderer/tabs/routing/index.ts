@@ -200,6 +200,30 @@ function updateActivePatchingTitle(): void {
 }
 
 /**
+ * A fresh list snapshot seeded from the console's live routing, so an
+ * untouched slot mirrors what the desk currently plays. Falls back to a copy
+ * of the currently displayed list when the console has no routing to draw from.
+ */
+function seedSetFromConsole(): SavedSet {
+  if (state.activeInputs.length) {
+    return {
+      inputs: state.activeInputs.map((p) => ({
+        destB3: p.destB3,
+        destLabel: p.destLabel,
+        name: p.name,
+        source: p.source,
+        sourceChannel: p.sourceChannel,
+      })),
+      stereoPairs: state.stereoPairs.map((p) => [p[0], p[1]]),
+    };
+  }
+  // No routing on the desk yet — mirror the currently displayed list if it
+  // exists, otherwise start from an empty set.
+  const fallback = editSets[activeEditSet];
+  return fallback ? JSON.parse(JSON.stringify(fallback)) : { inputs: [], stereoPairs: [] };
+}
+
+/**
  * Switch the displayed INPUT PATCHING list. The current on-screen state is
  * preserved into its slot; the target slot is seeded from the current list
  * on its first visit so the user starts from a copy they can diverge from.
@@ -211,18 +235,7 @@ function switchEditSet(target: "A" | "B"): void {
     // Seed an untouched list from the console's live routing, not from the
     // currently displayed list — loading a saved routing into A must not
     // leak into B.
-    editSets[target] = state.activeInputs.length
-      ? {
-          inputs: state.activeInputs.map((p) => ({
-            destB3: p.destB3,
-            destLabel: p.destLabel,
-            name: p.name,
-            source: p.source,
-            sourceChannel: p.sourceChannel,
-          })),
-          stereoPairs: state.stereoPairs.map((p) => [p[0], p[1]]),
-        }
-      : JSON.parse(JSON.stringify(editSets[activeEditSet]));
+    editSets[target] = seedSetFromConsole();
   }
   activeEditSet = target;
   updateAbButtons();
@@ -407,6 +420,7 @@ function updateTransferButtons(): void {
   if (elementRefs.uploadBtn) elementRefs.uploadBtn.disabled = equal || stereoDiffers;
   if (elementRefs.downloadBtn) elementRefs.downloadBtn.disabled = equal;
   updateTransferTooltips(equal, stereoDiffers);
+  updateSwapButton();
   // Red-highlight the Input Patching title and add a hover tooltip while the
   // editable table's stereo layout differs from the console's.
   if (elementRefs.inputPatchingTitle) {
@@ -418,6 +432,86 @@ function updateTransferButtons(): void {
       elementRefs.inputPatchingTitle.classList.remove("stereo-diff");
       delete elementRefs.inputPatchingTitle.dataset.tooltip;
     }
+  }
+}
+
+/** Canonical routing-identity string for a saved edit list. */
+function routingKey(set: SavedSet): string {
+  const map = new Map<number, string>();
+  for (const r of set.inputs) {
+    const prev = map.get(r.destB3);
+    map.set(r.destB3, prev ? `${prev};${r.source}:${r.sourceChannel}` : `${r.source}:${r.sourceChannel}`);
+  }
+  const entries = [...map.entries()].sort((x, y) => x[0] - y[0]);
+  return JSON.stringify([entries, set.stereoPairs]);
+}
+
+/**
+ * Whether the two editable lists currently differ (routing-wise). The current
+ * on-screen table is collapsed into its slot first so the comparison (and the
+ * swap button) reflects live edits. Slots are only ever seeded at well-defined
+ * points (connection/freeze, switching, loading) — never from inside this
+ * read-style check, which would lock partial mid-burst data into a slot.
+ */
+function abListsDiffer(): boolean {
+  editSets[activeEditSet] = captureEditSet();
+  const a = editSets.A;
+  const b = editSets.B;
+  if (!a || !b) return false;
+  return routingKey(a) !== routingKey(b);
+}
+
+/** Enable the A/B swap button only while the two lists differ. */
+function updateSwapButton(): void {
+  const differ = abListsDiffer();
+  elementRefs.abSwapBtn.disabled = !differ;
+  elementRefs.abSwapBtn.dataset.tooltip = differ
+    ? "Быстрая смена роутинга"
+    : "Списки A и B одинаковые";
+}
+
+/**
+ * Swap the live routing without touching the displayed A/B list:
+ * - if a list was uploaded before, push the opposite one onto the console;
+ * - if neither list has been uploaded yet, push the currently selected list.
+ * Blocked when the target list's stereo layout differs from the console's —
+ * same guard as Upload.
+ */
+async function swapRouting(): Promise<void> {
+  // Fold the on-screen table into its slot first so the sent list is fresh.
+  editSets[activeEditSet] = captureEditSet();
+  const live: "A" | "B" | null = lastUploadedSet;
+  const target: "A" | "B" = live ? (live === "A" ? "B" : "A") : activeEditSet;
+  const set = editSets[target];
+  if (!set) return;
+  if (stereoConfigKey(set.stereoPairs) !== stereoConfigKey(state.stereoPairs)) {
+    showSaveFeedback("Разная конфигурация каналов", "");
+    return;
+  }
+  elementRefs.uploadBtn.disabled = true;
+  try {
+    await sendPatchesToConsole(set.inputs);
+    showSaveFeedback("Отправлено", "✓ ");
+    lastUploadedSet = target;
+    updateActivePatchingTitle();
+    flashActivePatching(target);
+  } catch (err) {
+    showSaveFeedback(`Swap: ошибка — ${(err && (err as Error).message) || String(err)}`, "");
+  } finally {
+    elementRefs.uploadBtn.disabled = false;
+    updateTransferButtons();
+  }
+}
+
+/**
+ * Send a flat patch list (stereo right channels already expanded) to the
+ * console, one setInputPatch call per channel.
+ */
+async function sendPatchesToConsole(
+  inputs: ReadonlyArray<{ destB3: number; source: number; sourceChannel: number }>
+): Promise<void> {
+  for (const p of inputs) {
+    await window.sq.setInputPatch(p.destB3, p.source, p.sourceChannel);
   }
 }
 
@@ -698,9 +792,14 @@ async function confirmLoadRouting(): Promise<void> {
       stereoPairs: entry.stereoPairs || [],
     };
     editSets[activeEditSet] = set;
+    // Ensure the sibling slot exists so the swap button can activate — an
+    // untouched side is seeded from the console's routing.
+    const other: "A" | "B" = activeEditSet === "A" ? "B" : "A";
+    if (!editSets[other]) editSets[other] = seedSetFromConsole();
     buildEditInputs(set.inputs, set.stereoPairs);
     closeLoadModal();
     showSaveFeedback("Обновлено", "");
+    updateTransferButtons();
   } catch (err) {
     showSaveFeedback(`Ошибка: ${(err && (err as Error).message) || String(err)}`);
   }
@@ -708,9 +807,9 @@ async function confirmLoadRouting(): Promise<void> {
 
 // ── Upload / Download ────────────────────────────────────────────────
 
-/** Make the "Active Patching" title blink green once. */
-function flashActivePatching(): void {
-  flashTitle(elementRefs.activePatchingTitle);
+/** Make the "Active Patching" title blink once in the applied list's color. */
+function flashActivePatching(list?: "A" | "B"): void {
+  flashTitle(elementRefs.activePatchingTitle, list === "A" ? "flash-a" : "flash-b");
 }
 
 /** Make the "Input Patching" title blink green once. */
@@ -724,27 +823,11 @@ function flashInputPatching(): void {
  * R → N+1).
  */
 async function uploadInputPatching(): Promise<void> {
-  const rows = elementRefs.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]");
-  if (!rows.length) return;
+  const inputs = readEditInputs();
+  if (!inputs.length) return;
   elementRefs.uploadBtn.disabled = true;
-  let sent = 0;
   try {
-    for (const tr of rows) {
-      const destB3 = Number(tr.dataset.b3);
-      const srcSel = tr.querySelector<HTMLSelectElement>(".source-sel");
-      const inSel = tr.querySelector<HTMLSelectElement>(".input-sel");
-      if (!srcSel || !inSel) continue;
-      const source = Number(srcSel.value);
-      const sourceChannel = Number(inSel.value);
-      await window.sq.setInputPatch(destB3, source, sourceChannel);
-      sent++;
-      // Stereo row: also patch the right channel (N+1).
-      const b3r = tr.dataset.b3r ? Number(tr.dataset.b3r) : -1;
-      if (b3r >= 0) {
-        await window.sq.setInputPatch(b3r, source, sourceChannel + 1);
-        sent++;
-      }
-    }
+    await sendPatchesToConsole(inputs);
     showSaveFeedback("Отправлено", "✓ ");
     // The console now reflects the list that was uploaded — mark Active
     // Patching with that list's letter.
@@ -819,9 +902,18 @@ export function onRoutingSnapshot(snapshot: SnapshotPayload): void {
   syncEditInputs(snapshot.inputs, snapshot.stereoPairs);
 }
 
-/** Freeze the Input Patching snapshot after the initial state burst. */
+/**
+ * Freeze the Input Patching snapshot after the initial state burst. Both A
+ * and B are loaded from the console's full routing right on connection, so
+ * neither slot is empty and the swap button is immediately meaningful. Slots
+ * that were collapsed to an empty state mid-burst (before the console data
+ * had fully streamed in) are replaced with the real routing here.
+ */
 export function freezeEditTable(): void {
   editInputsFrozen = true;
+  if (!state.activeInputs.length) return;
+  if (!editSets.A || editSets.A.inputs.length === 0) editSets.A = seedSetFromConsole();
+  if (!editSets.B || editSets.B.inputs.length === 0) editSets.B = seedSetFromConsole();
 }
 
 /** Reset the tab state for a fresh dashboard session. */
@@ -837,6 +929,7 @@ export function reset(): void {
   elementRefs.editInputTbody.innerHTML = "";
   if (elementRefs.uploadBtn) elementRefs.uploadBtn.disabled = false;
   if (elementRefs.downloadBtn) elementRefs.downloadBtn.disabled = false;
+  updateSwapButton();
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
@@ -883,6 +976,7 @@ elementRefs.uploadBtn.addEventListener("click", uploadInputPatching);
 elementRefs.downloadBtn.addEventListener("click", downloadInputPatching);
 elementRefs.abBtn.addEventListener("click", () => switchEditSet("A"));
 elementRefs.bBtn.addEventListener("click", () => switchEditSet("B"));
+elementRefs.abSwapBtn.addEventListener("click", swapRouting);
 elementRefs.syncScrollBtn.addEventListener("click", () => {
   syncScrollEnabled = !syncScrollEnabled;
   elementRefs.syncScrollBtn.classList.toggle("active", syncScrollEnabled);

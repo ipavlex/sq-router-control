@@ -60,6 +60,7 @@ export const elementRefs: ElementRefs = {
   downloadBtn: $("#download-btn"),
   abBtn: $("#a-btn"),
   bBtn: $("#b-btn"),
+  abSwapBtn: $("#ab-swap-btn"),
   activePatchingTitle: $("#active-patching-title"),
   inputPatchingTitle: $("#input-patching-title"),
   syncScrollBtn: $("#sync-scroll-btn"),
@@ -193,13 +194,20 @@ export function showView(which: "routing" | "log" | "monitor"): void {
   elementRefs.monitorBtn.classList.toggle("active", which === "monitor");
 }
 
-/** Make a panel title blink green once (one-shot animation). */
-export function flashTitle(el: HTMLElement | null | undefined): void {
+/**
+ * Make a panel title blink once (one-shot animation).
+ * @param flashClass optional extra; "flash-green" by default, use "flash-a"/"flash-b"
+ * to blink in the A (accent) or B (green) list color.
+ */
+export function flashTitle(
+  el: HTMLElement | null | undefined,
+  flashClass: "flash-green" | "flash-a" | "flash-b" = "flash-green"
+): void {
   if (!el) return;
-  el.classList.remove("flash-green");
+  el.classList.remove("flash-green", "flash-a", "flash-b");
   void el.offsetWidth; // restart the animation if it just ran
-  el.classList.add("flash-green");
-  el.addEventListener("animationend", () => el.classList.remove("flash-green"), {
+  el.classList.add(flashClass);
+  el.addEventListener("animationend", () => el.classList.remove(flashClass), {
     once: true,
   });
 }

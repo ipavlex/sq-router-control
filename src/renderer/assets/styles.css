@@ -442,12 +442,23 @@ body {
   min-width: 0;
 }
 
-/* Green one-shot blink for the Active Patching title after a successful upload. */
+/* One-shot blink for the Active Patching title after a successful upload.
+   The flash color follows the list that was applied: green for A-list /
+   generic upload, accent (blue) for the A list, green for the B list. */
 @keyframes ap-flash {
   0%, 100% { color: var(--text-dim); }
-  50% { color: #35c46a; }
+  50% { color: var(--flash-color, #35c46a); }
 }
 .panel-head h2.flash-green {
+  --flash-color: #35c46a;
+  animation: ap-flash 1.2s ease 1;
+}
+.panel-head h2.flash-a {
+  --flash-color: var(--accent);
+  animation: ap-flash 1.2s ease 1;
+}
+.panel-head h2.flash-b {
+  --flash-color: var(--green);
   animation: ap-flash 1.2s ease 1;
 }
 
@@ -536,6 +547,12 @@ body {
 
 .transfer-btn svg {
   display: block;
+}
+
+/* Swap A/B button: keep its icon slightly smaller than the transfer arrows. */
+.ab-swap-btn svg {
+  width: 28px;
+  height: 28px;
 }
 
 /* Sync-scroll toggle pinned to the bottom of the transfer column. */
