@@ -208,7 +208,21 @@ function switchEditSet(target: "A" | "B"): void {
   if (target === activeEditSet) return;
   editSets[activeEditSet] = captureEditSet();
   if (!editSets[target]) {
-    editSets[target] = JSON.parse(JSON.stringify(editSets[activeEditSet]));
+    // Seed an untouched list from the console's live routing, not from the
+    // currently displayed list — loading a saved routing into A must not
+    // leak into B.
+    editSets[target] = state.activeInputs.length
+      ? {
+          inputs: state.activeInputs.map((p) => ({
+            destB3: p.destB3,
+            destLabel: p.destLabel,
+            name: p.name,
+            source: p.source,
+            sourceChannel: p.sourceChannel,
+          })),
+          stereoPairs: state.stereoPairs.map((p) => [p[0], p[1]]),
+        }
+      : JSON.parse(JSON.stringify(editSets[activeEditSet]));
   }
   activeEditSet = target;
   updateAbButtons();
