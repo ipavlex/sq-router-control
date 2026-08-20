@@ -41,6 +41,7 @@ export interface ElementRefs {
   inEmpty: HTMLElement;
   editInputTbody: HTMLTableSectionElement;
   editInEmpty: HTMLElement;
+  editSelAll: HTMLInputElement;
   updateStat: HTMLElement;
   log: HTMLElement;
   clearLog: HTMLButtonElement;

@@ -12,6 +12,8 @@ export interface EditRow {
   name: string;
   source: number;
   sourceChannel: number;
+  /** Whether the row is selected for the next Upload. */
+  checked?: boolean;
 }
 
 /** Anything mergeStereoInputs can consume: live snapshots or edit-table rows. */

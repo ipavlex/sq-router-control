@@ -243,6 +243,37 @@ function switchEditSet(target: "A" | "B"): void {
   buildEditInputs(targetSet.inputs || [], targetSet.stereoPairs || []);
 }
 
+/** Whether an input row for a given channel carries a checked "send" flag. */
+function checkedForInputs(inputs: PatchInput[], b3: number): boolean {
+  for (const inp of inputs) {
+    if (inp.destB3 === b3 && (inp as EditRow).checked) return true;
+  }
+  return false;
+}
+
+/**
+ * Pre-select rows of a freshly loaded routing that differ from the console's
+ * current routing, so Upload has something to send right away.
+ */
+function markDifferingChecked(set: SavedSet): void {
+  const active = new Map(
+    state.activeInputs.map((p) => [p.destB3, { source: p.source, sourceChannel: p.sourceChannel }])
+  );
+  for (const r of set.inputs) {
+    const a = active.get(r.destB3);
+    r.checked = !!a && (a.source !== r.source || a.sourceChannel !== r.sourceChannel);
+  }
+}
+
+/** Sync the header "select all" checkbox with the row checkboxes. */
+function updateSelectAllCheckbox(): void {
+  const rows = elementRefs.editInputTbody.querySelectorAll<HTMLInputElement>(".patch-send-chk");
+  let checked = 0;
+  for (const chk of rows) if (chk.checked) checked++;
+  elementRefs.editSelAll.checked = rows.length > 0 && checked === rows.length;
+  elementRefs.editSelAll.indeterminate = checked > 0 && checked < rows.length;
+}
+
 /** Build the full editable input-patching table from a snapshot. */
 function buildEditInputs(inputs: PatchInput[], pairs: number[][]): void {
   const merged = mergeStereoInputs(inputs, pairs || []);
@@ -262,6 +293,16 @@ function buildEditInputs(inputs: PatchInput[], pairs: number[][]): void {
       const p = stereoPairForLeft(r.destB3, pairs || []);
       tr.dataset.b3r = String(p ? p[1] : -1);
     }
+
+    const sendTd = document.createElement("td");
+    sendTd.className = "send-col";
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.className = "patch-send-chk";
+    chk.title = "Отметить канал для отправки на пульт";
+    chk.addEventListener("change", updateSelectAllCheckbox);
+    sendTd.appendChild(chk);
+    tr.appendChild(sendTd);
 
     const chTd = document.createElement("td");
     chTd.className = "ch-cell";
@@ -313,17 +354,25 @@ function buildEditInputs(inputs: PatchInput[], pairs: number[][]): void {
 
     srcSel.addEventListener("change", () => {
       repopulateInSel();
+      chk.checked = true;
+      updateSelectAllCheckbox();
       updateTransferButtons();
     });
     inSel.addEventListener("change", () => {
       inSel.dataset.prev = inSel.value;
+      chk.checked = true;
+      updateSelectAllCheckbox();
       updateTransferButtons();
     });
+
+    // Restore the saved selection (unchecked when the row carries no flag).
+    chk.checked = checkedForInputs(inputs, r.destB3);
 
     frag.appendChild(tr);
   }
   elementRefs.editInputTbody.appendChild(frag);
   editInputsBuilt = true;
+  updateSelectAllCheckbox();
   updateTransferButtons();
 }
 
@@ -605,11 +654,14 @@ async function confirmSaveRouting(): Promise<void> {
 
 /**
  * Read the current INPUT PATCHING table (selectors) back into an inputs array.
- * Stereo rows are expanded into left + right channel patches.
+ * Stereo rows are expanded into left + right channel patches. When
+ * `onlySelected` is true, rows whose checkbox is not checked are skipped.
  */
-function readEditInputs(): EditRow[] {
+function readEditInputs(onlySelected = false): EditRow[] {
   const inputs: EditRow[] = [];
   for (const tr of elementRefs.editInputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
+    const chk = tr.querySelector<HTMLInputElement>(".patch-send-chk");
+    if (onlySelected && (!chk || !chk.checked)) continue;
     const destB3 = Number(tr.dataset.b3);
     const srcSel = tr.querySelector<HTMLSelectElement>(".source-sel");
     const inSel = tr.querySelector<HTMLSelectElement>(".input-sel");
@@ -619,6 +671,7 @@ function readEditInputs(): EditRow[] {
     const nameEl = tr.querySelector(".edit-name");
     const name = nameEl && nameEl.textContent !== "—" ? nameEl.textContent : "";
     const b3r = tr.dataset.b3r ? Number(tr.dataset.b3r) : -1;
+    const checked = chk ? chk.checked : false;
     // Store the base label ("Input 7") — stereo rows get merged at load time.
     inputs.push({
       destB3,
@@ -626,6 +679,7 @@ function readEditInputs(): EditRow[] {
       name: name || "",
       source,
       sourceChannel,
+      checked,
     });
     if (b3r >= 0) {
       inputs.push({
@@ -634,6 +688,7 @@ function readEditInputs(): EditRow[] {
         name: name || "",
         source,
         sourceChannel: sourceChannel + 1,
+        checked,
       });
     }
   }
@@ -788,9 +843,10 @@ async function confirmLoadRouting(): Promise<void> {
     // only — nothing is sent to the console. The user can then apply it via
     // Upload. The list keeps the saved entry's own stereo layout.
     const set: SavedSet = {
-      inputs: entry.inputs || [],
-      stereoPairs: entry.stereoPairs || [],
+      inputs: (entry.inputs || []).map((r) => ({ ...r })),
+      stereoPairs: (entry.stereoPairs || []).map((p) => [p[0], p[1]]),
     };
+    markDifferingChecked(set);
     editSets[activeEditSet] = set;
     // Ensure the sibling slot exists so the swap button can activate — an
     // untouched side is seeded from the console's routing.
@@ -823,8 +879,11 @@ function flashInputPatching(): void {
  * R → N+1).
  */
 async function uploadInputPatching(): Promise<void> {
-  const inputs = readEditInputs();
-  if (!inputs.length) return;
+  const inputs = readEditInputs(true);
+  if (!inputs.length) {
+    showSaveFeedback("Не выбран ни один канал", "");
+    return;
+  }
   elementRefs.uploadBtn.disabled = true;
   try {
     await sendPatchesToConsole(inputs);
@@ -927,6 +986,8 @@ export function reset(): void {
   updateActivePatchingTitle();
   state.activeInputs = [];
   elementRefs.editInputTbody.innerHTML = "";
+  elementRefs.editSelAll.checked = false;
+  elementRefs.editSelAll.indeterminate = false;
   if (elementRefs.uploadBtn) elementRefs.uploadBtn.disabled = false;
   if (elementRefs.downloadBtn) elementRefs.downloadBtn.disabled = false;
   updateSwapButton();
@@ -977,6 +1038,13 @@ elementRefs.downloadBtn.addEventListener("click", downloadInputPatching);
 elementRefs.abBtn.addEventListener("click", () => switchEditSet("A"));
 elementRefs.bBtn.addEventListener("click", () => switchEditSet("B"));
 elementRefs.abSwapBtn.addEventListener("click", swapRouting);
+// Header "select all" checkbox of the Input Patching table.
+elementRefs.editSelAll.addEventListener("change", () => {
+  const checked = elementRefs.editSelAll.checked;
+  for (const chk of elementRefs.editInputTbody.querySelectorAll<HTMLInputElement>(".patch-send-chk")) {
+    chk.checked = checked;
+  }
+});
 elementRefs.syncScrollBtn.addEventListener("click", () => {
   syncScrollEnabled = !syncScrollEnabled;
   elementRefs.syncScrollBtn.classList.toggle("active", syncScrollEnabled);

@@ -38,6 +38,7 @@ export const elementRefs: ElementRefs = {
   inEmpty: $("#in-empty"),
   editInputTbody: $("#edit-input-table tbody"),
   editInEmpty: $("#edit-in-empty"),
+  editSelAll: $("#edit-sel-all") as HTMLInputElement,
   updateStat: $("#update-stat"),
   log: $("#log"),
   clearLog: $("#clear-log"),
