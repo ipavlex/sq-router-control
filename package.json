@@ -14,7 +14,8 @@
     "start": "npm run build && electron .",
     "dev": "npm run build:dev && electron . --enable-logging",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "dist:mac-arm64": "npm run build && electron-builder --mac --arm64"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
