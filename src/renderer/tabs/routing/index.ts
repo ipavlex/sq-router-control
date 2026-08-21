@@ -59,6 +59,14 @@ function formatSourceChannel(patch: SnapshotInput): string {
   return String(patch.sourceChannel + 1);
 }
 
+/**
+ * Channel-cell text: numeric only, without the "Input" prefix
+ * (e.g. "Input 7" → "7", "Input 3-4" → "3-4").
+ */
+function channelCellLabel(destLabel: string): string {
+  return destLabel.replace(/^Input\s+/, "");
+}
+
 // ── Active Patching table ────────────────────────────────────────────
 
 /** HTML for the level/signal meter cell (updated in place by updateMeters). */
@@ -93,7 +101,7 @@ export function renderInputs(inputs: SnapshotInput[]): void {
       ? `${r.sourceChannel + 1}-${(r._rightSourceChannel ?? 0) + 1}`
       : formatSourceChannel(r);
     tr.innerHTML =
-      `<td class="ch-cell">${escapeHtml(r.destLabel)}</td>` +
+      `<td class="ch-cell">${escapeHtml(channelCellLabel(r.destLabel))}</td>` +
       `<td class="name-cell">${escapeHtml(r.name || "—")}</td>` +
       `<td class="src-cell">${escapeHtml(r.sourceLabel)}</td>` +
       `<td>${escapeHtml(inLabel)}</td>` +
@@ -101,6 +109,9 @@ export function renderInputs(inputs: SnapshotInput[]): void {
     frag.appendChild(tr);
   }
   elementRefs.inputTbody.appendChild(frag);
+  // Re-apply the latest meter readings so a rebuild (e.g. a routing snapshot
+  // in demo mode) doesn't blank the bars until the next meter packet.
+  if (lastMeters) applyMeters(lastMeters);
   updateTransferButtons();
 }
 
@@ -115,6 +126,9 @@ const METER_HOT_DB = -6;
 
 let pendingMeters: MetersPayload | null = null;
 let meterFrame: number | null = null;
+/** Latest applied meters payload — re-applied on table rebuilds so the level
+ *  bars never blank out while waiting for the next meter packet. */
+let lastMeters: MetersPayload | null = null;
 
 /**
  * Apply a meters payload to the DOM, coalescing the incoming stream per
@@ -146,6 +160,7 @@ function meterClassName(db: number | null): string {
 }
 
 function applyMeters(m: MetersPayload | null): void {
+  lastMeters = m;
   for (const tr of elementRefs.inputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
       const fill = tr.querySelector<HTMLElement>(".meter-fill");
       const dbEl = tr.querySelector<HTMLElement>(".meter-db");
@@ -175,6 +190,7 @@ function applyMeters(m: MetersPayload | null): void {
 
 /** Clear all meter bars (used on: disconnect, table rebuild). */
 export function clearMeters(): void {
+  lastMeters = null;
   updateMeters(null);
 }
 
@@ -397,7 +413,7 @@ function buildEditInputs(inputs: PatchInput[], pairs: number[][]): void {
 
     const chTd = document.createElement("td");
     chTd.className = "ch-cell";
-    chTd.textContent = r.destLabel;
+    chTd.textContent = channelCellLabel(r.destLabel);
     tr.appendChild(chTd);
 
     const nameTd = document.createElement("td");

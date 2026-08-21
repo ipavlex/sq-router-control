@@ -867,10 +867,15 @@ h2.stereo-diff:hover::after {
   font-size: 10px;
   color: var(--text-faint);
   margin-left: 6px;
+  /* Fixed width keeps the column stable when a reading appears or vanishes. */
+  display: inline-block;
+  width: 44px;
+  text-align: right;
 }
 
 .route-table .meter-clip {
-  display: none;
+  display: inline-block;
+  visibility: hidden;
   vertical-align: middle;
   width: 7px;
   height: 7px;
@@ -881,7 +886,7 @@ h2.stereo-diff:hover::after {
 }
 
 .route-table .meter-clip.on {
-  display: inline-block;
+  visibility: visible;
 }
 
 /* ── Editable patch selectors ──────────────────────────────────────── */

@@ -10,6 +10,7 @@ import { Connection, VersionInfo, DspFrame } from "./transport/connection";
 import { RoutingModel, InputPatch, OutputPatch, labelToB3, b3ToLabel, MONITOR_LABEL_TO_SOURCE, RoutingSnapshot } from "./routing";
 import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
+import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -158,6 +159,9 @@ class SQController {
   private demoMode = false;
   private demoVersion: VersionInfo | null = null;
   private demoTimer: NodeJS.Timeout | null = null;
+  /** Simulated input meter stream (demo only). */
+  private demoMeters: DemoMetersSim | null = null;
+  private demoMetersTimer: NodeJS.Timeout | null = null;
   /** Generation counter for the initial-burst timers (invalidated on restart). */
   private demoBurstGen = 0;
   /** Generation counter for demoRefresh() variants. */
@@ -213,6 +217,11 @@ class SQController {
       clearInterval(this.demoTimer);
       this.demoTimer = null;
     }
+    if (this.demoMetersTimer) {
+      clearInterval(this.demoMetersTimer);
+      this.demoMetersTimer = null;
+    }
+    this.demoMeters = null;
     if (this.demoMode) {
       this.demoMode = false;
       this.demoVersion = null;
@@ -539,6 +548,9 @@ class SQController {
       // richer routing snapshots so the UI populates quickly, like a real mixer.
       this.startDemoInitialBurst();
 
+      // Stream simulated input meters alongside the routing burst.
+      this.startDemoMeters();
+
       return { ok: true, version: this.demoVersion, spec };
     } catch (err) {
       this.demoMode = false;
@@ -738,6 +750,31 @@ class SQController {
       }
     }, 4500);
     this.demoTimer.unref();
+  }
+
+  /**
+   * Stream simulated input meters (~25 Hz), mirroring the real UDP meter
+   * stream. Active channels are re-read from the routing model on every
+   * tick, so the bars follow demo routing changes and refreshes
+   * automatically.
+   */
+  private startDemoMeters(): void {
+    this.demoMeters = new DemoMetersSim();
+    this.demoMetersTimer = setInterval(() => {
+      if (!this.demoMode || !this.demoMeters) return;
+      try {
+        const snap = this.model.snapshot();
+        this.demoMeters.sync(snap.inputs, snap.stereoPairs);
+        this.send("sq:meters", this.demoMeters.tick());
+      } catch (err) {
+        // Never let the meter simulation crash the main process.
+        this.send("sq:log", {
+          level: "error",
+          msg: `Demo meters error: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }, DEMO_METERS_TICK_MS);
+    this.demoMetersTimer.unref();
   }
 
   /**

@@ -43,7 +43,7 @@ export enum MonitorOutSource {
 
 export const INPUT_SOURCE_LABEL: Record<number, string> = {
   [InputPatchSource.Local]: "Local",
-  [InputPatchSource.SLink]: "dSnake / SLink",
+  [InputPatchSource.SLink]: "dSk / SLink",
   [InputPatchSource.USB]: "USB",
   [InputPatchSource.IOPort]: "I/O Port",
 };
