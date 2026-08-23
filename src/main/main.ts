@@ -524,7 +524,7 @@ class SQController {
         fwB: 9,
         build: 4,
       };
-      const spec = modelSpec(0x01); // SQ-5: 16 local in, 8 local out
+      const spec = modelSpec(0x01); // SQ-5: 16 local in, 12 XLR + 2 TRS out
 
       this.model.reset();
       this.resetSceneState();

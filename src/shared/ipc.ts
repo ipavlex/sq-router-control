@@ -16,6 +16,11 @@ export interface ModelSpec {
   name: string;
   inputChannels: number;
   localInputs: number;
+  /** Local line outputs on XLR sockets (12/14/16). */
+  xlrOutputs: number;
+  /** Local line outputs on TRS jack sockets (A/B) — 2 on all models. */
+  trsOutputs: number;
+  /** Total assignable local outputs (XLR + TRS). */
   localOutputs: number;
   usbChannels: number;
   mixBuses: number;

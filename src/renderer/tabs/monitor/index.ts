@@ -14,18 +14,22 @@ import type { OutputOption, Dest, MixItem } from "./types";
  * Build the list of all available physical outputs from the model spec.
  * Returns array of {value, label} where value = "destType:channel".
  */
+/** TRS jack output labels (panel silkscreen A / B). */
+const TRS_LABELS = ["A", "B"];
+
 function buildOutputOptions(): OutputOption[] {
   const opts: OutputOption[] = [];
   const spec = state.modelSpec;
-  // Local Out 1..N
-  if (spec) {
-    for (let i = 1; i <= spec.localOutputs; i++) {
-      opts.push({ value: `0x1a:${i}`, label: `Local Out ${i}` });
-    }
-  } else {
-    for (let i = 1; i <= 24; i++) {
-      opts.push({ value: `0x1a:${i}`, label: `Local Out ${i}` });
-    }
+  // Local XLR Out 1..N, then the two TRS A/B outputs. The TRS jacks continue
+  // the local output bank (e.g. SQ-5: 12 XLR + TRS A = Local 13, B = 14), so
+  // they are addressed with the same destType 0x1a and the next channel numbers.
+  const xlrCount = spec ? spec.xlrOutputs : 12;
+  const trsCount = spec ? spec.trsOutputs : 2;
+  for (let i = 1; i <= xlrCount; i++) {
+    opts.push({ value: `0x1a:${i}`, label: `Local Out ${i}` });
+  }
+  for (let i = 0; i < trsCount && i < TRS_LABELS.length; i++) {
+    opts.push({ value: `0x1a:${xlrCount + i + 1}`, label: `TRS Out ${TRS_LABELS[i]}` });
   }
   // SLink Out 1..48
   for (let i = 1; i <= 48; i++) {
