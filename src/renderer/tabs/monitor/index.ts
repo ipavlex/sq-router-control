@@ -4,7 +4,8 @@
  * outputs, and the keyboard navigation.
  */
 import { elementRefs, state } from "../../core/utils";
-import type { SnapshotInput } from "../../../shared/ipc";
+import { dbToPercent, meterClassName } from "../../core/meters";
+import type { SnapshotInput, MetersPayload } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 
 // ── output selectors ─────────────────────────────────────────────────
@@ -205,6 +206,82 @@ function buildMixButtons(): void {
 
 // ── channel buttons ─────────────────────────────────────────────────
 
+// ── vertical level meters on the channel buttons ─────────────────────
+
+/**
+ * A thin vertical meter at the left edge of a channel button: fill grows
+ * bottom-up, clip flag lights at the top. Stereo buttons carry two of
+ * these (L, R) side by side.
+ */
+function buildChMeter(): HTMLElement {
+  const meter = document.createElement("span");
+  meter.className = "ch-meter";
+  const fill = document.createElement("span");
+  fill.className = "ch-meter-fill";
+  meter.appendChild(fill);
+  const clip = document.createElement("span");
+  clip.className = "ch-meter-clip";
+  meter.appendChild(clip);
+  return meter;
+}
+
+let pendingMeters: MetersPayload | null = null;
+let meterFrame: number | null = null;
+/** Latest applied payload — re-applied when buttons are rebuilt. */
+let lastMeters: MetersPayload | null = null;
+
+/**
+ * Apply a meters payload to the channel buttons, coalescing the incoming
+ * stream per animation frame (same pattern as the routing tab).
+ */
+export function updateMeters(p: MetersPayload | null): void {
+  pendingMeters = p;
+  if (meterFrame !== null) return;
+  meterFrame = requestAnimationFrame(() => {
+    meterFrame = null;
+    const m = pendingMeters;
+    pendingMeters = null;
+    applyMeters(m);
+  });
+}
+
+/** Clear all channel meters (disconnect / fresh session). */
+export function clearMeters(): void {
+  lastMeters = null;
+  updateMeters(null);
+}
+
+function applyMeters(m: MetersPayload | null): void {
+  lastMeters = m;
+  for (const btn of elementRefs.chButtons.querySelectorAll<HTMLButtonElement>(".ch-btn")) {
+    const b3 = Number(btn.dataset.b3);
+    const b3r = btn.dataset.b3r ? Number(btn.dataset.b3r) : null;
+    const meters = btn.querySelectorAll<HTMLElement>(".ch-meter");
+    // First bar = left (or mono) channel; second bar = stereo right.
+    applyChMeter(meters[0] ?? null, m, b3);
+    if (b3r !== null) applyChMeter(meters[1] ?? null, m, b3r);
+  }
+}
+
+/** Apply one channel's reading to a single vertical meter. */
+function applyChMeter(
+  meter: HTMLElement | null,
+  m: MetersPayload | null,
+  ch: number
+): void {
+  if (!meter) return;
+  const fill = meter.querySelector<HTMLElement>(".ch-meter-fill");
+  const clip = meter.querySelector<HTMLElement>(".ch-meter-clip");
+  if (!fill || !clip) return;
+
+  const db = m ? m.inputs[ch] ?? null : null;
+  const isClip = m ? !!m.clip[ch] : false;
+
+  fill.style.height = `${dbToPercent(db)}%`;
+  fill.className = `ch-meter-fill${meterClassName(db)}`;
+  clip.classList.toggle("on", isClip);
+}
+
 /** Check if a b3 is the left side of a stereo pair. Returns the pair or null. */
 function getStereoPair(b3: number): number[] | null {
   for (const pair of state.stereoPairs) {
@@ -243,6 +320,11 @@ export function buildChannelButtons(): void {
       btn.style.gridColumn = "span 2";
     }
 
+    // Vertical level meters first (L, then R for stereo) — querySelector
+    // order maps them to the left/right channels.
+    btn.appendChild(buildChMeter());
+    if (isStereo) btn.appendChild(buildChMeter());
+
     const numEl = document.createElement("span");
     numEl.className = "ch-btn-num";
     if (isStereo) {
@@ -263,6 +345,10 @@ export function buildChannelButtons(): void {
     }
     container.appendChild(btn);
   }
+
+  // Re-apply the latest readings so a rebuild (stereo pairs changed) doesn't
+  // blank the bars until the next meter packet.
+  if (lastMeters) applyMeters(lastMeters);
 }
 
 /** Click handler for a stereo pair — routes left ch to L out, right ch to R out. */
@@ -330,6 +416,7 @@ export function reset(): void {
   populateMonitorSelects();
   buildMixButtons();
   state.stereoPairs = [];
+  lastMeters = null; // fresh session — don't re-apply stale readings
   buildChannelButtons();
   // Main LR active by default (UI-only — no command sent unless enabled)
   activeSourceB3 = 0x68;

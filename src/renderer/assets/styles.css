@@ -1226,6 +1226,7 @@ h2.stereo-diff:hover::after {
 }
 
 .ch-btn {
+  position: relative;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -1238,6 +1239,57 @@ h2.stereo-diff:hover::after {
   gap: 2px;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
   min-width: 0;
+}
+
+/* ── Vertical level meters on channel buttons ──────────────────────── */
+.ch-meter {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  bottom: 3px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--bg-elev2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* Second bar of a stereo pair sits next to the first (L | R). */
+.ch-btn .ch-meter + .ch-meter {
+  left: 9px;
+}
+
+.ch-meter-fill {
+  display: block;
+  width: 100%;
+  height: 0;
+  background: linear-gradient(0deg, var(--green), var(--amber));
+  border-radius: 2px;
+  transition: height 0.12s linear;
+}
+
+.ch-meter-fill.meter-warn {
+  background: linear-gradient(0deg, var(--amber), var(--red));
+}
+
+.ch-meter-fill.meter-hot {
+  background: var(--red);
+}
+
+.ch-meter-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--red);
+  visibility: hidden;
+}
+
+.ch-meter-clip.on {
+  visibility: visible;
 }
 
 .ch-btn:hover {

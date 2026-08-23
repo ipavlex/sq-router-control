@@ -4,6 +4,7 @@
  * sync scroll, and the save/load routing modals.
  */
 import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../core/utils";
+import { METER_MIN_DB, dbToPercent, meterClassName, meterDbText } from "../../core/meters";
 import { buildChannelButtons } from "../monitor";
 import type { SnapshotInput, SnapshotPayload, MetersPayload } from "../../../shared/ipc";
 import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";
@@ -123,13 +124,8 @@ export function renderInputs(inputs: SnapshotInput[]): void {
 }
 
 // ── live level meters ────────────────────────────────────────────────
-
-/** Meter bar spans this dynamic range (dBFS). */
-const METER_MIN_DB = -60;
-/** dBFS at which the bar turns amber. */
-const METER_WARN_DB = -20;
-/** dBFS at which the bar turns red. */
-const METER_HOT_DB = -6;
+// Scale helpers (METER_MIN_DB, dbToPercent, meterClassName, meterDbText)
+// live in ../../core/meters — shared with the monitor tab.
 
 let pendingMeters: MetersPayload | null = null;
 let meterFrame: number | null = null;
@@ -150,20 +146,6 @@ export function updateMeters(p: MetersPayload | null): void {
     pendingMeters = null;
     applyMeters(m);
   });
-}
-
-/** dBFS → 0..100 bar fill (null → 0). */
-function dbToPercent(db: number | null): number {
-  if (db == null) return 0;
-  const clamped = Math.max(METER_MIN_DB, Math.min(0, db));
-  return ((clamped - METER_MIN_DB) / (0 - METER_MIN_DB)) * 100;
-}
-
-function meterClassName(db: number | null): string {
-  if (db == null) return "";
-  if (db >= METER_HOT_DB) return " meter-hot";
-  if (db >= METER_WARN_DB) return " meter-warn";
-  return "";
 }
 
 function applyMeters(m: MetersPayload | null): void {
@@ -235,16 +217,10 @@ function hideMeterTooltip(): void {
   if (meterTooltip) meterTooltip.style.display = "none";
 }
 
-/** One channel's reading as text. */
-function meterDbText(ch: number): string {
-  const db = lastMeters ? lastMeters.inputs[ch] ?? null : null;
-  return db != null && db >= METER_MIN_DB ? `${db.toFixed(1)} dB` : "нет сигнала";
-}
-
 /** One line of a stereo tooltip ("L  −12.3 dB"). */
 function tooltipLine(side: string, ch: number): HTMLElement {
   const el = document.createElement("div");
-  el.textContent = `${side}  ${meterDbText(ch)}`;
+  el.textContent = `${side}  ${meterDbText(ch, lastMeters)}`;
   return el;
 }
 
@@ -258,7 +234,7 @@ function updateMeterTooltipText(): void {
       tooltipLine("R", tooltipChR)
     );
   } else {
-    meterTooltip.textContent = meterDbText(tooltipChL);
+    meterTooltip.textContent = meterDbText(tooltipChL, lastMeters);
   }
 }
 
