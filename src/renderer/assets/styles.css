@@ -833,6 +833,28 @@ h2.stereo-diff:hover::after {
   text-align: right;
 }
 
+/* One bar line inside a meter cell; stereo cells stack two of them (L/R).
+   Flex kills the inline-block line-box (line-height) that otherwise inflated
+   each row and opened a phantom gap between the stacked bars. */
+.route-table .meter-row {
+  display: flex;
+  align-items: center;
+}
+
+.route-table .meter-cell.stereo .meter-row + .meter-row {
+  margin-top: 1px;
+}
+
+/* Stereo bars are the same thickness as mono. */
+.route-table .meter-cell.stereo .meter {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.route-table .meter-cell.stereo .meter-fill {
+  border-radius: 3px;
+}
+
 .route-table .meter {
   position: relative;
   display: inline-block;
@@ -862,17 +884,6 @@ h2.stereo-diff:hover::after {
   background: var(--red);
 }
 
-.route-table .meter-db {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-faint);
-  margin-left: 6px;
-  /* Fixed width keeps the column stable when a reading appears or vanishes. */
-  display: inline-block;
-  width: 44px;
-  text-align: right;
-}
-
 .route-table .meter-clip {
   display: inline-block;
   visibility: hidden;
@@ -887,6 +898,24 @@ h2.stereo-diff:hover::after {
 
 .route-table .meter-clip.on {
   visibility: visible;
+}
+
+/* Hover tooltip for the level bars. A native title can't keep up with the
+   live-updating value (Chromium resets its timer on every change), so the
+   dB reading is rendered in this custom tooltip instead. */
+.meter-tooltip {
+  position: absolute;
+  z-index: 60;
+  pointer-events: none;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
 /* ── Editable patch selectors ──────────────────────────────────────── */

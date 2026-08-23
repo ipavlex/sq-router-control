@@ -69,19 +69,26 @@ function channelCellLabel(destLabel: string): string {
 
 // ── Active Patching table ────────────────────────────────────────────
 
-/** HTML for the level/signal meter cell (updated in place by updateMeters). */
-function meterTdHtml(): string {
-  return (
-    `<td class="meter-cell">` +
+/**
+ * HTML for the level/signal meter cell (updated in place by updateMeters).
+ * Stereo rows get two stacked bars — one per L/R channel, each with its own
+ * clip indicator. The dB reading is shown in a custom hover tooltip.
+ */
+function meterTdHtml(stereo: boolean): string {
+  const row = (cls: string): string =>
+    `<span class="meter-row ${cls}">` +
     `<span class="meter"><span class="meter-fill"></span></span>` +
-    `<span class="meter-db"></span>` +
     `<span class="meter-clip" title="Перегруз (clip)"></span>` +
-    `</td>`
-  );
+    `</span>`;
+  if (stereo) {
+    return `<td class="meter-cell stereo">${row("meter-l")}${row("meter-r")}</td>`;
+  }
+  return `<td class="meter-cell">${row("meter-l")}</td>`;
 }
 
 export function renderInputs(inputs: SnapshotInput[]): void {
   state.activeInputs = inputs;
+  hideMeterTooltip(); // rows are rebuilt — the hovered bar is gone
   const merged = mergeStereoInputs(inputs, state.stereoPairs);
   elementRefs.inputTbody.innerHTML = "";
   if (!merged.length) {
@@ -105,7 +112,7 @@ export function renderInputs(inputs: SnapshotInput[]): void {
       `<td class="name-cell">${escapeHtml(r.name || "—")}</td>` +
       `<td class="src-cell">${escapeHtml(r.sourceLabel)}</td>` +
       `<td>${escapeHtml(inLabel)}</td>` +
-      meterTdHtml();
+      meterTdHtml(!!r._stereo);
     frag.appendChild(tr);
   }
   elementRefs.inputTbody.appendChild(frag);
@@ -162,36 +169,124 @@ function meterClassName(db: number | null): string {
 function applyMeters(m: MetersPayload | null): void {
   lastMeters = m;
   for (const tr of elementRefs.inputTbody.querySelectorAll<HTMLTableRowElement>("tr[data-b3]")) {
-      const fill = tr.querySelector<HTMLElement>(".meter-fill");
-      const dbEl = tr.querySelector<HTMLElement>(".meter-db");
-      const clipEl = tr.querySelector<HTMLElement>(".meter-clip");
-      if (!fill || !dbEl || !clipEl) continue;
-
-      let db: number | null = m ? m.inputs[Number(tr.dataset.b3)] ?? null : null;
-      let clip = false;
-      if (m) {
-        const b3r = tr.dataset.b3r ? Number(tr.dataset.b3r) : -1;
-        if (b3r >= 0) {
-          const r = m.inputs[b3r] ?? null;
-          if (db == null) db = r;
-          else if (r != null) db = Math.max(db, r);
-          clip = clip || !!m.clip[b3r];
-        }
-        clip = clip || !!m.clip[Number(tr.dataset.b3)];
-      }
-
-      fill.style.width = `${dbToPercent(db)}%`;
-      fill.className = `meter-fill${meterClassName(db)}`;
-      clipEl.classList.toggle("on", clip);
-      dbEl.textContent =
-        db != null && db >= METER_MIN_DB ? db.toFixed(1) : "";
+    // Left (or mono) channel bar.
+    applyMeterToRow(tr.querySelector(".meter-l"), m, Number(tr.dataset.b3));
+    // Right channel bar of a stereo pair, if present.
+    const b3r = tr.dataset.b3r ? Number(tr.dataset.b3r) : -1;
+    if (b3r >= 0) applyMeterToRow(tr.querySelector(".meter-r"), m, b3r);
   }
+  // Keep the hovered bar's tooltip in sync with the fresh readings.
+  updateMeterTooltipText();
+}
+
+/** Apply one channel's reading to a single meter row (L, R or mono). */
+function applyMeterToRow(
+  row: Element | null,
+  m: MetersPayload | null,
+  ch: number
+): void {
+  if (!row) return;
+  const fill = row.querySelector<HTMLElement>(".meter-fill");
+  const clipEl = row.querySelector<HTMLElement>(".meter-clip");
+  if (!fill || !clipEl) return;
+
+  const db = m ? m.inputs[ch] ?? null : null;
+  const clip = m ? !!m.clip[ch] : false;
+
+  fill.style.width = `${dbToPercent(db)}%`;
+  fill.className = `meter-fill${meterClassName(db)}`;
+  clipEl.classList.toggle("on", clip);
 }
 
 /** Clear all meter bars (used on: disconnect, table rebuild). */
 export function clearMeters(): void {
   lastMeters = null;
+  hideMeterTooltip();
   updateMeters(null);
+}
+
+// ── meter hover tooltip ──────────────────────────────────────────────
+
+/**
+ * A native `title` tooltip can't be used here: the value mutates on every
+ * meter tick, and Chromium resets the tooltip's show-timer on each title
+ * change, so it would never appear. This custom tooltip shows up instantly
+ * and updates live while the cursor rests on a bar.
+ */
+let meterTooltip: HTMLDivElement | null = null;
+/** Left (or mono) channel (b3) of the hovered cell; null when hidden. */
+let tooltipChL: number | null = null;
+/** Right channel (b3) of a hovered stereo cell; null for mono. */
+let tooltipChR: number | null = null;
+
+function ensureMeterTooltip(): HTMLDivElement {
+  if (!meterTooltip) {
+    meterTooltip = document.createElement("div");
+    meterTooltip.className = "meter-tooltip";
+    meterTooltip.style.display = "none";
+    document.body.appendChild(meterTooltip);
+  }
+  return meterTooltip;
+}
+
+function hideMeterTooltip(): void {
+  tooltipChL = null;
+  tooltipChR = null;
+  if (meterTooltip) meterTooltip.style.display = "none";
+}
+
+/** One channel's reading as text. */
+function meterDbText(ch: number): string {
+  const db = lastMeters ? lastMeters.inputs[ch] ?? null : null;
+  return db != null && db >= METER_MIN_DB ? `${db.toFixed(1)} dB` : "нет сигнала";
+}
+
+/** One line of a stereo tooltip ("L  −12.3 dB"). */
+function tooltipLine(side: string, ch: number): HTMLElement {
+  const el = document.createElement("div");
+  el.textContent = `${side}  ${meterDbText(ch)}`;
+  return el;
+}
+
+/** Refresh the tooltip text from the latest meters payload (live while hovering). */
+function updateMeterTooltipText(): void {
+  if (!meterTooltip || tooltipChL == null) return;
+  if (tooltipChR != null) {
+    // Stereo: a single tooltip covers both channels of the pair.
+    meterTooltip.replaceChildren(
+      tooltipLine("L", tooltipChL),
+      tooltipLine("R", tooltipChR)
+    );
+  } else {
+    meterTooltip.textContent = meterDbText(tooltipChL);
+  }
+}
+
+/** Show the tooltip above (or below, if no room) the hovered meter cell. */
+function showMeterTooltip(
+  cellEl: HTMLElement,
+  chL: number,
+  chR: number | null
+): void {
+  const tip = ensureMeterTooltip();
+  tooltipChL = chL;
+  tooltipChR = chR;
+  updateMeterTooltipText();
+
+  // Measure while invisible so the tooltip never flashes at its old position.
+  tip.style.visibility = "hidden";
+  tip.style.display = "block";
+  const r = cellEl.getBoundingClientRect();
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  let left = r.left + r.width / 2 - tw / 2 + window.scrollX;
+  let top = r.top - th - 6 + window.scrollY;
+  if (r.top < th + 8) top = r.bottom + 6 + window.scrollY; // flip below
+  const maxX = window.scrollX + document.documentElement.clientWidth - tw - 4;
+  left = Math.max(window.scrollX + 4, Math.min(left, maxX));
+  tip.style.left = `${Math.round(left)}px`;
+  tip.style.top = `${Math.round(top)}px`;
+  tip.style.visibility = "visible";
 }
 
 // ── editable input patching ──────────────────────────────────────────
@@ -1102,6 +1197,29 @@ export function reset(): void {
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
+
+// meter hover tooltip (delegated — rows are rebuilt on every snapshot).
+// Hover is tracked on the whole meter cell: a stereo pair shares one
+// tooltip showing both channels, and moving between its L/R bars keeps it.
+elementRefs.inputTbody.addEventListener("mouseover", (e: MouseEvent) => {
+  const cell = (e.target as HTMLElement).closest<HTMLElement>(".meter-cell");
+  if (!cell) return;
+  const related = e.relatedTarget as HTMLElement | null;
+  if (related && cell.contains(related)) return;
+  const tr = cell.closest<HTMLTableRowElement>("tr[data-b3]");
+  if (!tr) return;
+  const b3r = tr.dataset.b3r ? Number(tr.dataset.b3r) : -1;
+  showMeterTooltip(cell, Number(tr.dataset.b3), b3r >= 0 ? b3r : null);
+});
+elementRefs.inputTbody.addEventListener("mouseout", (e: MouseEvent) => {
+  const cell = (e.target as HTMLElement).closest(".meter-cell");
+  if (!cell) return;
+  const related = e.relatedTarget as HTMLElement | null;
+  if (related && cell.contains(related)) return;
+  hideMeterTooltip();
+});
+// The bars scroll under a fixed tooltip — hide it while the list scrolls.
+elementRefs.activeTableWrap.addEventListener("scroll", hideMeterTooltip);
 
 // save-routing modal
 elementRefs.saveRoutingBtn.addEventListener("click", openSaveModal);
