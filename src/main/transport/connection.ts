@@ -98,6 +98,9 @@ export class Connection extends EventEmitter {
     channelInfo: 0,
   };
 
+  /** Distinct meter-packet shapes seen (id:bodyLen) — protocol discovery. */
+  private _meterCombos = new Set<string>();
+
   constructor(opts: ConnectOptions) {
     super();
     this.opts = {
@@ -126,6 +129,7 @@ export class Connection extends EventEmitter {
         this.emit("meterData", msg, rinfo.address);
         const meters = decodeMeterMessage(msg);
         if (meters) this.emit("meters", meters);
+        this._noteMeterPacket(msg, !!meters);
       });
 
       udp.bind(0, () => {
@@ -150,6 +154,7 @@ export class Connection extends EventEmitter {
     this.framer.reset();
     this._initialStateParsed = false;
     this._frameCounters = { total: 0, dsp: 0, paramData: 0, routingBlock: 0, fullState: 0, channelInfo: 0 };
+    this._meterCombos.clear();
 
     const timeout = setTimeout(() => {
       tcp.destroy();
@@ -277,6 +282,32 @@ export class Connection extends EventEmitter {
       raw: payload,
     };
     this.emit("dsp", d);
+  }
+
+  /**
+   * Protocol-discovery helper: report the shape of every distinct meter
+   * packet once (id + body length + whether it was decoded). Mix / Main-LR
+   * levels are expected to live in packets we don't decode yet — this
+   * inventory makes them visible in the app log on a real console, so the
+   * format can be reverse-engineered from the logged id/length pairs.
+   */
+  private _noteMeterPacket(msg: Buffer, decoded: boolean): void {
+    let key: string;
+    let id: number;
+    let len: number;
+    if (msg.length >= 6 && msg[0] === 0x7f) {
+      id = msg[1];
+      len = msg.readUInt16LE(2);
+      key = `${id}:${len}`;
+    } else {
+      // Malformed / non-meter packet on the meter port.
+      id = -1;
+      len = msg.length;
+      key = `raw:${len}`;
+    }
+    if (this._meterCombos.has(key)) return;
+    this._meterCombos.add(key);
+    this.emit("meterPacketInfo", { id, len, decoded });
   }
 
   /** Send a raw frame to the mixer. */

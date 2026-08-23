@@ -936,6 +936,17 @@ class SQController {
       this.send("sq:meters", m);
     });
 
+    // Meter-packet inventory — one log line per distinct packet shape seen
+    // on the UDP meter port. Exists to discover the (yet undecoded) mix /
+    // Main-LR meter packets when connected to a real console.
+    conn.on("meterPacketInfo", (p: { id: number; len: number; decoded: boolean }) => {
+      const idStr = p.id < 0 ? "—" : `0x${p.id.toString(16).padStart(2, "0")}`;
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Meter packet: id=${idStr} body=${p.len}B${p.decoded ? "" : " (undecoded)"}`,
+      });
+    });
+
     conn.on("error", (err: Error) => {
       this.send("sq:log", { level: "error", msg: `Connection error: ${err.message}` });
     });

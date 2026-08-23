@@ -1179,6 +1179,7 @@ h2.stereo-diff:hover::after {
 }
 
 .mix-btn {
+  position: relative; /* anchors the vertical level meter */
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;

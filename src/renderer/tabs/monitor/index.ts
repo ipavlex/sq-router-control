@@ -199,6 +199,8 @@ function buildMixButtons(): void {
     btn.className = "mix-btn";
     btn.textContent = item.label;
     btn.dataset.b3 = String(item.b3);
+    // Vertical level meter at the left edge (mix levels: demo mode only).
+    btn.appendChild(buildChMeter());
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
     container.appendChild(btn);
   }
@@ -258,24 +260,39 @@ function applyMeters(m: MetersPayload | null): void {
     const b3r = btn.dataset.b3r ? Number(btn.dataset.b3r) : null;
     const meters = btn.querySelectorAll<HTMLElement>(".ch-meter");
     // First bar = left (or mono) channel; second bar = stereo right.
-    applyChMeter(meters[0] ?? null, m, b3);
-    if (b3r !== null) applyChMeter(meters[1] ?? null, m, b3r);
+    applyChMeter(meters[0] ?? null, m ? m.inputs[b3] ?? null : null, m ? !!m.clip[b3] : false);
+    if (b3r !== null) {
+      applyChMeter(meters[1] ?? null, m ? m.inputs[b3r] ?? null : null, m ? !!m.clip[b3r] : false);
+    }
+  }
+  // Mix buses + Main LR (demo mode only until the live format is decoded).
+  for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")) {
+    const meter = btn.querySelector<HTMLElement>(".ch-meter");
+    if (!meter) continue;
+    const b3 = Number(btn.dataset.b3);
+    if (b3 === 0x68) {
+      applyChMeter(meter, m ? m.mainLR ?? null : null, m ? !!m.mainLRClip : false);
+    } else {
+      const idx = b3 - 0x58;
+      applyChMeter(
+        meter,
+        m && m.mixes ? m.mixes[idx] ?? null : null,
+        m && m.mixClip ? !!m.mixClip[idx] : false
+      );
+    }
   }
 }
 
 /** Apply one channel's reading to a single vertical meter. */
 function applyChMeter(
   meter: HTMLElement | null,
-  m: MetersPayload | null,
-  ch: number
+  db: number | null,
+  isClip: boolean
 ): void {
   if (!meter) return;
   const fill = meter.querySelector<HTMLElement>(".ch-meter-fill");
   const clip = meter.querySelector<HTMLElement>(".ch-meter-clip");
   if (!fill || !clip) return;
-
-  const db = m ? m.inputs[ch] ?? null : null;
-  const isClip = m ? !!m.clip[ch] : false;
 
   fill.style.height = `${dbToPercent(db)}%`;
   fill.className = `ch-meter-fill${meterClassName(db)}`;
@@ -426,6 +443,10 @@ export function reset(): void {
 }
 
 // ── bindings ─────────────────────────────────────────────────────────
+
+// The Main LR button is static HTML — attach its level meter once.
+elementRefs.mainlrBtn.dataset.b3 = String(0x68);
+elementRefs.mainlrBtn.appendChild(buildChMeter());
 
 elementRefs.monLDest.addEventListener("change", async () => {
   // Auto-select the neighboring (channel+1) output for the right side.
