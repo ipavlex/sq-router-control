@@ -6,6 +6,7 @@
  */
 import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import * as path from "node:path";
+import * as fs from "node:fs";
 import { Connection, VersionInfo, DspFrame } from "./transport/connection";
 import { RoutingModel, InputPatch, OutputPatch, labelToB3, b3ToLabel, MONITOR_LABEL_TO_SOURCE, RoutingSnapshot } from "./routing";
 import { modelSpec, SQModelSpec } from "./models";
@@ -945,6 +946,16 @@ class SQController {
 const controller = new SQController();
 
 function createWindow(): void {
+  // App icon shipped next to main.js (see webpack.config.js). In dev mode the
+  // process runs from the Electron binary, so the Dock would otherwise show
+  // the generic Electron icon — override it at runtime. The packaged app
+  // embeds its icon via electron-builder; the file may not exist there.
+  // Note: dock.setIcon() only accepts PNG/JPEG (NativeImage), not .icns.
+  const iconPath = path.join(__dirname, "icon.png");
+  if (process.platform === "darwin" && app.dock && fs.existsSync(iconPath)) {
+    app.dock.setIcon(iconPath);
+  }
+
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 820,
@@ -952,6 +963,7 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: "#0f1115",
     title: "SQ Router Control",
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

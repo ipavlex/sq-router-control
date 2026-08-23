@@ -1,7 +1,41 @@
 <!-- ── Connection screen ─────────────────────────────────────────── -->
 <section id="connect-screen" class="screen">
   <div class="brand">
-    <div class="logo">SQ</div>
+    <div class="logo" aria-hidden="true">
+      <!-- Mini version of the app icon: five level meters, green → amber → red. -->
+      <svg viewBox="0 0 1024 1024" width="58" height="58">
+        <defs>
+          <linearGradient id="lg-green" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4fe2a0"/>
+            <stop offset="100%" stop-color="#2fa874"/>
+          </linearGradient>
+          <linearGradient id="lg-amber" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffc95e"/>
+            <stop offset="100%" stop-color="#e09a2e"/>
+          </linearGradient>
+          <linearGradient id="lg-red" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ff7a85"/>
+            <stop offset="100%" stop-color="#d94a56"/>
+          </linearGradient>
+        </defs>
+        <rect x="64" y="64" width="896" height="896" rx="200" ry="200" fill="#141926"/>
+        <rect x="84" y="84" width="856" height="856" rx="184" ry="184" fill="none" stroke="#272d39" stroke-width="6"/>
+        <g fill="#1c212b" stroke="#272d39" stroke-width="4">
+          <rect x="176" y="250" width="96" height="600" rx="30"/>
+          <rect x="320" y="250" width="96" height="600" rx="30"/>
+          <rect x="464" y="250" width="96" height="600" rx="30"/>
+          <rect x="608" y="250" width="96" height="600" rx="30"/>
+          <rect x="752" y="250" width="96" height="600" rx="30"/>
+        </g>
+        <rect x="176" y="640" width="96" height="210" rx="30" fill="url(#lg-green)"/>
+        <rect x="320" y="490" width="96" height="360" rx="30" fill="url(#lg-amber)"/>
+        <rect x="464" y="298" width="96" height="552" rx="30" fill="url(#lg-red)"/>
+        <rect x="608" y="562" width="96" height="288" rx="30" fill="url(#lg-green)"/>
+        <rect x="752" y="400" width="96" height="450" rx="30" fill="url(#lg-amber)"/>
+        <circle cx="512" cy="272" r="13" fill="#f0616d"/>
+        <circle cx="512" cy="272" r="20" fill="#f0616d" opacity="0.25"/>
+      </svg>
+    </div>
     <div>
       <h1>SQ Router Control</h1>
       <p class="sub">Allen &amp; Heath SQ — network routing monitor</p>

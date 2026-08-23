@@ -97,14 +97,16 @@ body {
   width: 58px;
   height: 58px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-  color: #fff;
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 24px;
+  overflow: hidden;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 24px rgba(79, 156, 249, 0.35);
+  box-shadow: 0 8px 24px rgba(79, 156, 249, 0.25);
+}
+
+.logo svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .brand h1 {
