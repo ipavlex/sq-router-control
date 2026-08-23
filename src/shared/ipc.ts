@@ -15,6 +15,11 @@ export interface ModelSpec {
   id: number;
   name: string;
   inputChannels: number;
+  /** Local mic/line inputs on XLR sockets (16/24/32). */
+  xlrInputs: number;
+  /** Local line inputs on jack sockets: ST1, ST2 (TRS) + ST3 (3.5mm) — 6 on all models. */
+  lineInputs: number;
+  /** Total local input sockets (XLR + line), continuing one bank. */
   localInputs: number;
   /** Local line outputs on XLR sockets (12/14/16). */
   xlrOutputs: number;
