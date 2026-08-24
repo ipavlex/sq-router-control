@@ -2,6 +2,10 @@
  * SQ Router Control — Monitor tab.
  * L/R output selectors, mix / channel / Main LR routing into the selected
  * outputs, and the keyboard navigation.
+ *
+ * Mono channel selection supports an ad-hoc pair: click a channel (→ both
+ * L/R outputs), then Shift+click a second mono channel — the first goes to
+ * the L output, the second to the R output.
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
@@ -75,9 +79,9 @@ function populateMonitorSelects(): void {
     }
     for (const g of Object.values(groups)) sel.appendChild(g);
   }
-  // Default to Local Out 1 (L) and Local Out 2 (R)
-  elementRefs.monLDest.value = "0x1a:1";
-  elementRefs.monRDest.value = "0x1a:2";
+  // No pre-selected outputs — both selects start at the "— не выбран —" placeholder.
+  elementRefs.monLDest.value = "";
+  elementRefs.monRDest.value = "";
   // Re-apply usage annotations if a routing snapshot has already arrived.
   applyOutputUsage();
 }
@@ -185,19 +189,19 @@ function clearActiveMix(): void {
 
 /**
  * Toggle routing for a mix (mutual exclusion: only one mix at a time).
- * Selecting routes the mix to the selected L/R outputs; deselecting leaves
- * the current routing untouched.
+ * Selecting routes the mix to the selected L/R outputs; clicking the active
+ * mix keeps it selected (no-op; ESC clears).
  */
 async function toggleMixRoute(b3: number, btn: HTMLButtonElement): Promise<void> {
-  const isOn = btn.classList.contains("active");
+  // Click the active mix → keep it selected.
+  if (btn.classList.contains("active")) return;
+
   clearActiveMix();
   // Also clear channel selections when picking a mix
   clearChannelSelection();
-  if (!isOn) {
-    activeSourceB3 = b3;
-    btn.classList.add("active");
-    await routeActiveSelection();
-  }
+  activeSourceB3 = b3;
+  btn.classList.add("active");
+  await routeActiveSelection();
 }
 
 /** Clear L/R channel highlights and selection. */
@@ -212,17 +216,61 @@ function clearChannelSelection(): void {
 /**
  * Mono channel click handler — single selection at a time.
  *   Click inactive channel → clear previous, route channel to BOTH L/R outputs (blue)
- *   Click active channel   → deselect (routing stays as-is)
+ *   Click a member of a pair → solo it: only the clicked channel stays active
+ *                              (routed to both L/R), the partner is dropped
+ *   Click the single active channel → stays selected (no-op; ESC clears)
+ *   Shift+click a second mono channel → pair them: first → L out, second → R out (green)
  */
-async function onChannelClick(b3: number, btn: HTMLButtonElement): Promise<void> {
+async function onChannelClick(
+  b3: number,
+  btn: HTMLButtonElement,
+  shift = false
+): Promise<void> {
   // Selecting a channel clears any active mix.
   clearActiveMix();
 
-  // Click active channel → deselect.
-  if (btn.classList.contains("active-l")) {
-    btn.classList.remove("active-l");
-    leftChannelB3 = null;
+  // Click the R partner → solo it: R becomes the single mono selection
+  // (routed to both L/R), the L channel is dropped.
+  if (btn.classList.contains("active-r")) {
+    const lBtn = elementRefs.chButtons.querySelector(`.ch-btn[data-b3="${leftChannelB3}"]`);
+    lBtn?.classList.remove("active-l");
+    btn.classList.remove("active-r");
+    leftChannelB3 = b3;
+    rightChannelB3 = null;
+    btn.classList.add("active-l");
+    await routeActiveSelection();
     return;
+  }
+
+  // Click the L channel of a pair → solo it: the partner is dropped, L keeps
+  // routing (now to both L/R outputs).
+  if (btn.classList.contains("active-l") && rightChannelB3 !== null) {
+    const rBtn = elementRefs.chButtons.querySelector(`.ch-btn[data-b3="${rightChannelB3}"]`);
+    rBtn?.classList.remove("active-r");
+    rightChannelB3 = null;
+    await routeActiveSelection();
+    return;
+  }
+
+  // Click the single active channel → keep it selected. Also guards the
+  // Shift-branch below from pairing a channel with itself.
+  if (btn.classList.contains("active-l")) {
+    return;
+  }
+
+  // Shift+click extends a mono selection into an ad-hoc pair:
+  // first channel → L out, this one → R out.
+  if (shift && leftChannelB3 !== null && rightChannelB3 === null) {
+    const lBtn = elementRefs.chButtons.querySelector<HTMLButtonElement>(
+      `.ch-btn[data-b3="${leftChannelB3}"]`
+    );
+    // Don't pair with a stereo-button selection — restart instead.
+    if (lBtn && !lBtn.classList.contains("ch-stereo")) {
+      rightChannelB3 = b3;
+      btn.classList.add("active-r");
+      await routeActiveSelection();
+      return;
+    }
   }
 
   // Clear any previous mono selection.
@@ -391,7 +439,7 @@ export function buildChannelButtons(): void {
     if (isStereo) {
       btn.addEventListener("click", () => onStereoClick(pair[0], pair[1], btn));
     } else {
-      btn.addEventListener("click", () => onChannelClick(b3, btn));
+      btn.addEventListener("click", (e) => onChannelClick(b3, btn, e.shiftKey));
     }
     container.appendChild(btn);
   }
@@ -406,13 +454,8 @@ async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): 
   // Selecting a channel clears any active mix.
   clearActiveMix();
 
-  // Toggle off if already active — routing stays as-is.
-  if (btn.classList.contains("active-l")) {
-    btn.classList.remove("active-l");
-    leftChannelB3 = null;
-    rightChannelB3 = null;
-    return;
-  }
+  // Click the active stereo pair → keep it selected (no-op; ESC clears).
+  if (btn.classList.contains("active-l")) return;
 
   // Clear previous channel selections.
   if (leftChannelB3 !== null || rightChannelB3 !== null) {

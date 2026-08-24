@@ -201,7 +201,7 @@ export class RoutingModel {
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
       };
-      this.replaceOutput("bus", record.sourceLabel, record);
+      this.replaceOutput(record);
       this.updates++;
       return true;
     }
@@ -217,7 +217,7 @@ export class RoutingModel {
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
       };
-      this.replaceOutput("fx", record.sourceLabel, record);
+      this.replaceOutput(record);
       this.updates++;
       return true;
     }
@@ -232,7 +232,7 @@ export class RoutingModel {
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
       };
-      this.replaceOutput("monitor", record.sourceLabel, record);
+      this.replaceOutput(record);
       this.updates++;
       return true;
     }
@@ -240,17 +240,17 @@ export class RoutingModel {
     return false;
   }
 
-  /** Replace an existing output patch keyed by (kind, source) to avoid dupes. */
-  private replaceOutput(
-      kind: OutputPatch["kind"],
-      sourceLabel: string,
-      record: OutputPatch
-  ): void {
-    const idx = this.outputPatches.findIndex(
-      (p) => p.kind === kind && p.sourceLabel === sourceLabel
+  /**
+   * Insert an output patch keyed by its physical destination. One output
+   * socket carries exactly one source, so a new patch replaces whatever was
+   * previously routed to the same (dest, destChannel). The same source may
+   * legitimately feed several outputs (e.g. a mono source → both L and R).
+   */
+  private replaceOutput(record: OutputPatch): void {
+    this.outputPatches = this.outputPatches.filter(
+      (p) => !(p.dest === record.dest && p.destChannel === record.destChannel)
     );
-    if (idx >= 0) this.outputPatches[idx] = record;
-    else this.outputPatches.push(record);
+    this.outputPatches.push(record);
   }
 
   setChannelName(b3: number, name: string): void {
