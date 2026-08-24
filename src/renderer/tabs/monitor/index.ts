@@ -5,7 +5,7 @@
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
-import type { SnapshotInput, MetersPayload } from "../../../shared/ipc";
+import type { SnapshotInput, SnapshotOutput, MetersPayload } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 
 // ── output selectors ─────────────────────────────────────────────────
@@ -69,6 +69,8 @@ function populateMonitorSelects(): void {
       const opt = document.createElement("option");
       opt.value = o.value;
       opt.textContent = o.label;
+      // Base label kept aside — usage annotations rewrite textContent in place.
+      opt.dataset.baseLabel = o.label;
       groups[type].appendChild(opt);
     }
     for (const g of Object.values(groups)) sel.appendChild(g);
@@ -76,6 +78,50 @@ function populateMonitorSelects(): void {
   // Default to Local Out 1 (L) and Local Out 2 (R)
   elementRefs.monLDest.value = "0x1a:1";
   elementRefs.monRDest.value = "0x1a:2";
+  // Re-apply usage annotations if a routing snapshot has already arrived.
+  applyOutputUsage();
+}
+
+// ── output usage annotations ────────────────────────────────────────
+
+/** Latest routing outputs — re-applied when the selects are rebuilt. */
+let lastOutputs: SnapshotOutput[] | null = null;
+
+/**
+ * Annotate the L/R output selectors with what each physical output is
+ * currently routed to (from the routing snapshot). A used output shows
+ * "· <source>" next to its label; a free one keeps the plain label.
+ */
+export function updateOutputUsage(outputs: SnapshotOutput[]): void {
+  lastOutputs = outputs;
+  applyOutputUsage();
+}
+
+/** destType:destChannel (decimal) → routed source label(s), joined on conflict. */
+function outputUsageMap(): Map<string, string> {
+  const byKey = new Map<string, string>();
+  for (const out of lastOutputs ?? []) {
+    const key = `${out.dest}:${out.destChannel}`;
+    const prev = byKey.get(key);
+    byKey.set(key, prev ? `${prev} + ${out.sourceLabel}` : out.sourceLabel);
+  }
+  return byKey;
+}
+
+/** Rewrite option labels as "base · source" for outputs present in the routing. */
+function applyOutputUsage(): void {
+  if (!lastOutputs) return;
+  const byKey = outputUsageMap();
+  for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
+    for (const opt of sel.options) {
+      if (!opt.value) continue; // "— не выбран —" placeholder
+      const [destTypeHex, chStr] = opt.value.split(":");
+      const src = byKey.get(`${parseInt(destTypeHex, 16)}:${Number(chStr)}`);
+      const base = opt.dataset.baseLabel || opt.textContent || "";
+      opt.dataset.baseLabel = base;
+      opt.textContent = src ? `${base} · ${src}` : base;
+    }
+  }
 }
 
 /** Whether monitor changes should be applied to the actual mixer. */
@@ -417,6 +463,7 @@ export function updateChannelNames(inputs: SnapshotInput[]): void {
 // ── reset (fresh dashboard session) ─────────────────────────────────
 
 export function reset(): void {
+  lastOutputs = null; // fresh session — no stale usage annotations
   populateMonitorSelects();
   buildMixButtons();
   state.stereoPairs = [];
