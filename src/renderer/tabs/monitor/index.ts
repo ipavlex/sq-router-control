@@ -87,8 +87,8 @@ function populateMonitorSelects(): void {
   elementRefs.monRDest.value = "";
   // Re-apply usage annotations if a routing snapshot has already arrived.
   applyOutputUsage();
-  // Source buttons stay locked until both outputs are chosen.
-  updateSourceLock();
+  // Disable safe outputs; lock sources until both outputs are chosen.
+  applySafeOutputLock();
 }
 
 // ── source lock (until both outputs are chosen) ─────────────────────
@@ -175,6 +175,7 @@ let lastOutputs: SnapshotOutput[] | null = null;
 export function updateOutputUsage(outputs: SnapshotOutput[]): void {
   lastOutputs = outputs;
   applyOutputUsage();
+  updateLockPanelUsage();
 }
 
 /** destType:destChannel (decimal) → routed source label(s), joined on conflict. */
@@ -188,20 +189,203 @@ function outputUsageMap(): Map<string, string> {
   return byKey;
 }
 
+// ── output lock modal (padlock button) ──────────────────────────────
+
+/** localStorage key for the persisted safe-outputs list. */
+const SAFE_OUTPUTS_KEY = "sq_safe_outputs";
+
+/** Load the safe-outputs set from localStorage (survives app restarts). */
+function loadSafeOutputs(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAFE_OUTPUTS_KEY) || "[]");
+    const set = new Set<string>();
+    if (Array.isArray(raw)) {
+      for (const k of raw) {
+        if (typeof k === "string" && /^\d+:\d+$/.test(k)) set.add(k);
+      }
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+/** Outputs selected in the lock modal: "destType:destChannel" (decimal) keys. */
+const lockedOutputs = loadSafeOutputs();
+
+/** Persist the safe-outputs set to localStorage. */
+function persistSafeOutputs(): void {
+  try {
+    localStorage.setItem(SAFE_OUTPUTS_KEY, JSON.stringify([...lockedOutputs]));
+  } catch {
+    /* storage unavailable — keep the in-memory set only */
+  }
+}
+
+/** Red dot on the padlock button while any safe output is selected. */
+function updateLockBtnDot(): void {
+  elementRefs.monLockBtn.classList.toggle("has-sel", lockedOutputs.size > 0);
+}
+
+/** Dest types shown as tabs in the lock modal. */
+const LOCK_TAB_DESTS = [0x1a, 0x1c, 0x1d, 0x1e] as const;
+
+function lockModalOpen(): boolean {
+  return !elementRefs.monLockModal.hidden;
+}
+
+function openLockModal(): void {
+  buildLockPanels();
+  elementRefs.monLockModal.hidden = false;
+}
+
+function closeLockModal(): void {
+  elementRefs.monLockModal.hidden = true;
+}
+
+/** One output entry for a lock tab: {key, short label for the button}. */
+function lockTabOutputs(destType: number): { key: string; label: string }[] {
+  const spec = state.modelSpec;
+  const entries: { key: string; label: string }[] = [];
+  if (destType === 0x1a) {
+    // Local XLR Out 1..N, then TRS A/B continuing the bank.
+    const xlrCount = spec ? spec.xlrOutputs : 12;
+    const trsCount = spec ? spec.trsOutputs : 2;
+    for (let i = 1; i <= xlrCount; i++) entries.push({ key: `0x1a:${i}`, label: String(i) });
+    for (let i = 0; i < trsCount && i < TRS_LABELS.length; i++) {
+      entries.push({ key: `0x1a:${xlrCount + i + 1}`, label: TRS_LABELS[i] });
+    }
+  } else {
+    const count =
+      destType === 0x1c ? 48 :
+      destType === 0x1d ? (spec ? spec.usbChannels : 32) :
+      64; // I/O Port
+    const prefix = `0x${destType.toString(16)}`;
+    for (let i = 1; i <= count; i++) entries.push({ key: `${prefix}:${i}`, label: String(i) });
+  }
+  return entries;
+}
+
+/** Build the tab panels: small output buttons with usage annotations. */
+function buildLockPanels(): void {
+  const byKey = outputUsageMap();
+  const panels = elementRefs.monLockPanels;
+  panels.innerHTML = "";
+  for (const destType of LOCK_TAB_DESTS) {
+    const panel = document.createElement("div");
+    panel.className = "mon-lock-panel";
+    panel.dataset.dest = `0x${destType.toString(16)}`;
+    const grid = document.createElement("div");
+    grid.className = "mon-out-grid";
+    for (const entry of lockTabOutputs(destType)) {
+      const [destTypeHex, chStr] = entry.key.split(":");
+      const usageKey = `${parseInt(destTypeHex, 16)}:${Number(chStr)}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mon-out-btn";
+      btn.dataset.key = usageKey;
+      if (lockedOutputs.has(usageKey)) btn.classList.add("selected");
+      const num = document.createElement("span");
+      num.className = "mon-out-num";
+      num.textContent = entry.label;
+      btn.appendChild(num);
+      const src = document.createElement("span");
+      src.className = "mon-out-src";
+      src.textContent = byKey.get(usageKey) ?? "";
+      btn.appendChild(src);
+      btn.addEventListener("click", () => {
+        btn.classList.toggle("selected");
+        if (btn.classList.contains("selected")) lockedOutputs.add(usageKey);
+        else lockedOutputs.delete(usageKey);
+        persistSafeOutputs();
+        updateLockTabDots();
+        updateLockBtnDot();
+        applySafeOutputLock();
+      });
+      grid.appendChild(btn);
+    }
+    panel.appendChild(grid);
+    panels.appendChild(panel);
+  }
+  updateLockTabDots();
+  // Show the panel of the active tab.
+  syncLockPanels();
+}
+
+/** Show only the panel of the active tab. */
+function syncLockPanels(): void {
+  const activeTab = elementRefs.monLockTabs.querySelector<HTMLButtonElement>(".mon-lock-tab.active");
+  const activeDest = activeTab?.dataset.dest ?? null;
+  for (const panel of elementRefs.monLockPanels.querySelectorAll<HTMLElement>(".mon-lock-panel")) {
+    panel.hidden = panel.dataset.dest !== activeDest;
+  }
+}
+
+/** Light the red dot on tabs that have at least one selected output. */
+function updateLockTabDots(): void {
+  for (const tab of elementRefs.monLockTabs.querySelectorAll<HTMLButtonElement>(".mon-lock-tab")) {
+    const destType = parseInt(tab.dataset.dest ?? "0", 16);
+    const has = [...lockedOutputs].some((k) => k.startsWith(`${destType}:`));
+    tab.classList.toggle("has-sel", has);
+  }
+}
+
+/** Refresh usage annotations on the lock buttons (routing snapshot arrived). */
+function updateLockPanelUsage(): void {
+  if (!lockModalOpen()) return;
+  const byKey = outputUsageMap();
+  for (const btn of elementRefs.monLockPanels.querySelectorAll<HTMLButtonElement>(".mon-out-btn")) {
+    const src = btn.querySelector(".mon-out-src");
+    if (src) src.textContent = byKey.get(btn.dataset.key ?? "") ?? "";
+  }
+}
+
+/** Compose an option label: base name + routed source + safe marker. */
+function refreshOptionLabel(opt: HTMLOptionElement, byKey: Map<string, string>): void {
+  if (!opt.value) return; // "— не выбран —" placeholder
+  const [destTypeHex, chStr] = opt.value.split(":");
+  const key = `${parseInt(destTypeHex, 16)}:${Number(chStr)}`;
+  const base = opt.dataset.baseLabel || opt.textContent || "";
+  opt.dataset.baseLabel = base;
+  const src = byKey.get(key);
+  let label = src ? `${base} · ${src}` : base;
+  if (lockedOutputs.has(key)) label += " · 🔒";
+  opt.textContent = label;
+}
+
 /** Rewrite option labels as "base · source" for outputs present in the routing. */
 function applyOutputUsage(): void {
   if (!lastOutputs) return;
   const byKey = outputUsageMap();
   for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
+    for (const opt of sel.options) refreshOptionLabel(opt, byKey);
+  }
+}
+
+/**
+ * Disable the safe outputs in the L/R selectors (they can't be chosen) and
+ * drop a current selection that just became safe. Re-renders option labels
+ * so the 🔒 marker appears/disappears immediately.
+ */
+function applySafeOutputLock(): void {
+  const byKey = lastOutputs ? outputUsageMap() : new Map<string, string>();
+  for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
     for (const opt of sel.options) {
-      if (!opt.value) continue; // "— не выбран —" placeholder
+      if (!opt.value) continue;
       const [destTypeHex, chStr] = opt.value.split(":");
-      const src = byKey.get(`${parseInt(destTypeHex, 16)}:${Number(chStr)}`);
-      const base = opt.dataset.baseLabel || opt.textContent || "";
-      opt.dataset.baseLabel = base;
-      opt.textContent = src ? `${base} · ${src}` : base;
+      const key = `${parseInt(destTypeHex, 16)}:${Number(chStr)}`;
+      opt.disabled = lockedOutputs.has(key);
+      refreshOptionLabel(opt, byKey);
+    }
+    // The currently selected output just became safe → drop the selection.
+    if (sel.value) {
+      const [destTypeHex, chStr] = sel.value.split(":");
+      if (lockedOutputs.has(`${parseInt(destTypeHex, 16)}:${Number(chStr)}`)) {
+        sel.value = "";
+      }
     }
   }
+  updateSourceLock();
 }
 
 /** Whether monitor changes should be applied to the actual mixer. */
@@ -654,6 +838,9 @@ export function reset(): void {
   lastOutputs = null; // fresh session — no stale usage annotations
   savedOutputs = null; // no borrow session to restore
   borrowedKeys = null;
+  // Safe outputs persist across sessions (localStorage) — not cleared here.
+  closeLockModal();
+  updateLockBtnDot();
   elementRefs.monEnable.checked = false; // fresh session — start unchecked
   populateMonitorSelects();
   buildMixButtons();
@@ -672,10 +859,11 @@ export function reset(): void {
 // ── bindings ─────────────────────────────────────────────────────────
 
 elementRefs.monLDest.addEventListener("change", async () => {
-  // Auto-select the neighboring (channel+1) output for the right side.
+  // Auto-select the neighboring (channel+1) output for the right side —
+  // unless it is a safe output (disabled).
   const [destTypeHex, chStr] = elementRefs.monLDest.value.split(":");
   const neighborVal = `${destTypeHex}:${Number(chStr) + 1}`;
-  if ([...elementRefs.monRDest.options].some((o) => o.value === neighborVal)) {
+  if ([...elementRefs.monRDest.options].some((o) => o.value === neighborVal && !o.disabled)) {
     elementRefs.monRDest.value = neighborVal;
   }
   updateSourceLock();
@@ -695,6 +883,22 @@ elementRefs.monEnable.addEventListener("change", () => {
   void onMonEnableChange();
 });
 
+// Padlock button — opens the output selection modal.
+elementRefs.monLockBtn.addEventListener("click", () => {
+  if (lockModalOpen()) closeLockModal();
+  else openLockModal();
+});
+elementRefs.monLockClose.addEventListener("click", closeLockModal);
+for (const tab of elementRefs.monLockTabs.querySelectorAll<HTMLButtonElement>(".mon-lock-tab")) {
+  tab.addEventListener("click", () => {
+    for (const t of elementRefs.monLockTabs.querySelectorAll(".mon-lock-tab")) {
+      t.classList.remove("active");
+    }
+    tab.classList.add("active");
+    syncLockPanels();
+  });
+}
+
 // Main LR button — routes Main LR like a mix selection
 elementRefs.mainlrBtn.addEventListener("click", () => toggleMixRoute(0x68, elementRefs.mainlrBtn));
 
@@ -705,6 +909,7 @@ elementRefs.mainlrBtn.addEventListener("click", () => toggleMixRoute(0x68, eleme
 
 window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (elementRefs.viewMonitor.hidden) return;
+  if (lockModalOpen()) return;
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
 
@@ -748,6 +953,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
 
 window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (elementRefs.viewMonitor.hidden) return;
+  if (lockModalOpen()) return;
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
 
   const num = parseInt(e.key, 10);
@@ -774,6 +980,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
 window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (elementRefs.viewMonitor.hidden) return;
   if (e.key !== "Escape") return;
+  // ESC with the lock modal open just closes the modal.
+  if (lockModalOpen()) {
+    e.preventDefault();
+    closeLockModal();
+    return;
+  }
   if (!monEnabled()) return;
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   e.preventDefault();

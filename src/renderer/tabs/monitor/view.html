@@ -1,6 +1,12 @@
 <!-- ── View: Monitor ─────────────────────────────────────────────── -->
 <div id="view-monitor" class="view" hidden>
   <div class="monitor-setup">
+    <button id="mon-lock-btn" type="button" class="mon-lock-btn" title="Выходы">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="11" width="16" height="9" rx="2"></rect>
+        <path d="M8 11V7a4 4 0 1 1 8 0v4"></path>
+      </svg>
+    </button>
     <label class="switch-label">
       <input type="checkbox" id="mon-enable" />
       <span class="switch"></span>
@@ -19,4 +25,21 @@
   <div class="mix-buttons" id="mix-buttons"></div>
   <div class="ch-buttons" id="ch-buttons"></div>
   <div class="fx-buttons" id="fx-buttons"></div>
+
+  <!-- ── Output lock modal ─────────────────────────────────────────── -->
+  <div id="mon-lock-modal" class="modal-overlay" hidden>
+    <div class="modal-card modal-card-wide mon-lock-card">
+      <h3 class="modal-title">Safes Output</h3>
+      <div class="mon-lock-tabs" id="mon-lock-tabs">
+        <button type="button" class="mon-lock-tab active" data-dest="0x1a">Local</button>
+        <button type="button" class="mon-lock-tab" data-dest="0x1c">SLink</button>
+        <button type="button" class="mon-lock-tab" data-dest="0x1d">USB</button>
+        <button type="button" class="mon-lock-tab" data-dest="0x1e">I/O Port</button>
+      </div>
+      <div class="mon-lock-panels" id="mon-lock-panels"></div>
+      <div class="modal-actions">
+        <button id="mon-lock-close" type="button" class="btn primary">Готово</button>
+      </div>
+    </div>
+  </div>
 </div>
