@@ -789,13 +789,9 @@ class SQController {
         this.applyFxPatch(0, "R", toUsb ? 0x1d : 0x1a, toUsb ? 1 : 7);
         return `FX1 Return → ${toUsb ? "USB Out 1/2" : "Local Out 8"}`;
       },
-      // Recall the next demo scene so the "current scene" tracks visibly.
-      () => {
-        const names = ["Soundcheck", "Sunday Service", "Rehearsal"];
-        const next = ((this.currentSceneId ?? -1) + 1) % names.length;
-        this.currentSceneId = next;
-        return `Scene recalled: ${next + 1} — ${names[next]}`;
-      },
+      // NOTE: scene recall is NOT part of the periodic simulation — in demo
+      // mode the scene changes only when the user presses "Обновить"
+      // (see demoRefresh).
     ];
 
     let tick = 0;
@@ -845,8 +841,10 @@ class SQController {
 
   /**
    * Demo-mode "Обновить": regenerate a completely new simulated routing —
-   * different channel names, different stereo pairs, different patching.
-   * Pushes the fresh snapshot to the renderer and returns it.
+   * different channel names, different stereo pairs, different patching —
+   * and recall the next demo scene. The scene changes ONLY here: the
+   * periodic simulation never touches it. Pushes the fresh snapshot to the
+   * renderer and returns it.
    */
   demoRefresh(): RoutingSnapshot {
     if (!this.demoMode) return this.snapshot();
@@ -854,6 +852,11 @@ class SQController {
     const generation = ++this.demoRefreshGen;
     const variant = generation % DEMO_VARIANTS.length;
     const config = DEMO_VARIANTS[variant];
+
+    // Recall the next demo scene (cyclically).
+    const sceneNames = ["Soundcheck", "Sunday Service", "Rehearsal"];
+    const nextScene = ((this.currentSceneId ?? -1) + 1) % sceneNames.length;
+    this.currentSceneId = nextScene;
 
     this.model.reset();
     this.model.routingBlockBytes = 928;
@@ -879,6 +882,10 @@ class SQController {
     }
 
     const snap = this.snapshot();
+    this.send("sq:log", {
+      level: "ok",
+      msg: `Scene recalled: ${nextScene + 1} — ${sceneNames[nextScene]}`,
+    });
     this.send("sq:log", {
       level: "ok",
       msg: `Демо обновлено (вариант ${variant + 1}/${DEMO_VARIANTS.length}): ${snap.inputs.length} входов, ${snap.stereoPairs.length} стерео-пар.`,
