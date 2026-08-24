@@ -346,6 +346,33 @@ class SQController {
   }
 
   /**
+   * Route one side of an FX return to a physical output.
+   * fxIndex: 0-based FX engine (FX 1-4).
+   * side: "L" | "R" — FX returns are patched per side (modifier 0x16 / 0x17).
+   * destType: 0x1a Local, 0x1b ME, 0x1c SLink, 0x1d USB, 0x1e IOPort.
+   * destChannel: 1-based channel number on that output bus.
+   */
+  setFxOutputPatch(fxIndex: number, side: "L" | "R", destType: number, destChannel: number): void {
+    const ch0 = destChannel - 1;
+    const destName =
+      destType === 0x1a ? "Local" :
+      destType === 0x1b ? "ME" :
+      destType === 0x1c ? "SLink" :
+      destType === 0x1d ? "USB" :
+      destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
+
+    this.sendPatchFrame(fxIndex, side === "L" ? 0x16 : 0x17, ch0 & 0xff, destType & 0xff);
+    this.send("sq:log", {
+      level: "dsp",
+      msg: `Route FX${fxIndex + 1} ${side} → ${destName} Out ${destChannel}`,
+    });
+    // In demo mode the model changed locally — flush so the UI reflects it.
+    if (this.demoMode) {
+      this.send("sq:routing", this.snapshot());
+    }
+  }
+
+  /**
    * Patch a single input channel to a new physical source.
    * destB3: mixer input channel address (0x00–0x2f).
    * source: InputPatchSource (0x01 Local, 0x02 SLink, 0x03 USB, 0x04 IOPort).
@@ -1013,6 +1040,10 @@ function registerIpc(): void {
   });
   ipcMain.handle("sq:setOutputPatch", (_e, sourceB3: number, destType: number, destChannel: number) => {
     controller.setOutputPatch(sourceB3, destType, destChannel);
+    return true;
+  });
+  ipcMain.handle("sq:setFxOutputPatch", (_e, fxIndex: number, side: "L" | "R", destType: number, destChannel: number) => {
+    controller.setFxOutputPatch(fxIndex, side, destType, destChannel);
     return true;
   });
   ipcMain.handle("sq:requestDump", () => {

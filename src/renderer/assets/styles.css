@@ -1215,6 +1215,46 @@ h2.stereo-diff:hover::after {
   min-width: auto;
 }
 
+/* ── FX return buttons ─────────────────────────────────────────────── */
+.fx-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* 20px top + 12px bottom of .ch-buttons = same 32px gap as
+     mix-buttons → ch-buttons. */
+  padding: 20px 24px;
+  justify-content: center;
+}
+
+.fx-btn {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 20px;
+  min-width: 72px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.fx-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.fx-btn.active {
+  background: linear-gradient(135deg, var(--accent), #3ecf8e);
+  border-color: transparent;
+  color: #fff;
+}
+
+.fx-btn:active {
+  transform: scale(0.96);
+}
+
 /* ── Channel buttons ───────────────────────────────────────────────── */
 .ch-buttons {
   display: grid;
@@ -1222,7 +1262,9 @@ h2.stereo-diff:hover::after {
   gap: 6px;
   padding: 12px 24px;
   overflow-y: auto;
-  flex: 1 1 auto;
+  /* Don't stretch to fill the view — the FX row sits right below the
+     channels, mirroring the mix-buttons → ch-buttons spacing. */
+  flex: 0 1 auto;
   min-height: 0;
   align-content: start;
 }

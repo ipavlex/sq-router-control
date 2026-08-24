@@ -31,6 +31,7 @@ export const elementRefs: ElementRefs = {
   monRDest: $("#mon-r-dest"),
   mixButtons: $("#mix-buttons"),
   chButtons: $("#ch-buttons"),
+  fxButtons: $("#fx-buttons"),
   mainlrBtn: $("#mainlr-btn"),
   monEnable: $("#mon-enable"),
   disconnectBtn: $("#disconnect-btn"),

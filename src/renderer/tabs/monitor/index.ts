@@ -1,11 +1,14 @@
 /**
  * SQ Router Control — Monitor tab.
- * L/R output selectors, mix / channel / Main LR routing into the selected
- * outputs, and the keyboard navigation.
+ * L/R output selectors, mix / channel / FX return / Main LR routing into the
+ * selected outputs, and the keyboard navigation.
  *
  * Mono channel selection supports an ad-hoc pair: click a channel (→ both
  * L/R outputs), then Shift+click a second mono channel — the first goes to
  * the L output, the second to the R output.
+ *
+ * FX returns (FX 1-4) are stereo sources: the L side is routed to the L
+ * output, the R side to the R output.
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
@@ -150,10 +153,21 @@ async function routeSourceToOutput(
   await window.sq.setOutputPatch(sourceB3, dest.destType, dest.destChannel);
 }
 
+/** Route one side of an FX return to a physical output (FX output patch). */
+async function routeFxToOutput(
+  fxIndex: number,
+  side: "L" | "R",
+  dest: Dest | null
+): Promise<void> {
+  if (!dest) return;
+  await window.sq.setFxOutputPatch(fxIndex, side, dest.destType, dest.destChannel);
+}
+
 /**
  * Route the currently selected source to the selected L/R monitor outputs:
  *   stereo pair   → left channel → L out, right channel → R out
  *   mono channel  → source → both L and R outs
+ *   FX return     → L side → L out, R side → R out
  *   mix / Main LR → source → both L and R outs
  * A deselection never changes the routing — the outputs keep the last source.
  */
@@ -167,6 +181,9 @@ async function routeActiveSelection(): Promise<void> {
   } else if (leftChannelB3 !== null) {
     await routeSourceToOutput(leftChannelB3, L);
     await routeSourceToOutput(leftChannelB3, R);
+  } else if (activeFxIndex !== null) {
+    await routeFxToOutput(activeFxIndex, "L", L);
+    await routeFxToOutput(activeFxIndex, "R", R);
   } else if (activeSourceB3 !== null) {
     await routeSourceToOutput(activeSourceB3, L);
     await routeSourceToOutput(activeSourceB3, R);
@@ -197,8 +214,9 @@ async function toggleMixRoute(b3: number, btn: HTMLButtonElement): Promise<void>
   if (btn.classList.contains("active")) return;
 
   clearActiveMix();
-  // Also clear channel selections when picking a mix
+  // Also clear channel and FX selections when picking a mix
   clearChannelSelection();
+  clearFxSelection();
   activeSourceB3 = b3;
   btn.classList.add("active");
   await routeActiveSelection();
@@ -226,8 +244,9 @@ async function onChannelClick(
   btn: HTMLButtonElement,
   shift = false
 ): Promise<void> {
-  // Selecting a channel clears any active mix.
+  // Selecting a channel clears any active mix and FX return.
   clearActiveMix();
+  clearFxSelection();
 
   // Click the R partner → solo it: R becomes the single mono selection
   // (routed to both L/R), the L channel is dropped.
@@ -298,6 +317,55 @@ function buildMixButtons(): void {
     btn.textContent = item.label;
     btn.dataset.b3 = String(item.b3);
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
+    container.appendChild(btn);
+  }
+}
+
+// ── FX return buttons ───────────────────────────────────────────────
+
+/** Currently selected FX return (0-based engine index), or null. */
+let activeFxIndex: number | null = null;
+
+/** Clear the FX return selection and highlight. */
+function clearFxSelection(): void {
+  for (const b of elementRefs.fxButtons.querySelectorAll(".fx-btn.active")) {
+    b.classList.remove("active");
+  }
+  activeFxIndex = null;
+}
+
+/**
+ * FX return click handler — routes the return like a stereo pair:
+ * L side → L output, R side → R output.
+ * Clicking the active FX keeps it selected (no-op; ESC clears).
+ */
+async function onFxClick(fxIndex: number, btn: HTMLButtonElement): Promise<void> {
+  // Selecting an FX return clears mixes and channel selections.
+  clearActiveMix();
+  clearChannelSelection();
+
+  // Click the active FX → keep it selected.
+  if (btn.classList.contains("active")) return;
+
+  // Drop the previously selected FX return (mutual exclusion, like mixes).
+  clearFxSelection();
+
+  activeFxIndex = fxIndex;
+  btn.classList.add("active");
+  await routeActiveSelection();
+}
+
+function buildFxButtons(): void {
+  const container = elementRefs.fxButtons;
+  container.innerHTML = "";
+  // SQ has 4 FX engines (b3 0x40–0x43 → FX 1-4).
+  for (let i = 0; i < 4; i++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "fx-btn";
+    btn.textContent = `FX ${i + 1}`;
+    btn.dataset.fx = String(i);
+    btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
 }
@@ -451,8 +519,9 @@ export function buildChannelButtons(): void {
 
 /** Click handler for a stereo pair — routes left ch to L out, right ch to R out. */
 async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): Promise<void> {
-  // Selecting a channel clears any active mix.
+  // Selecting a channel clears any active mix and FX return.
   clearActiveMix();
+  clearFxSelection();
 
   // Click the active stereo pair → keep it selected (no-op; ESC clears).
   if (btn.classList.contains("active-l")) return;
@@ -512,10 +581,12 @@ export function reset(): void {
   state.stereoPairs = [];
   lastMeters = null; // fresh session — don't re-apply stale readings
   buildChannelButtons();
+  buildFxButtons();
   // Main LR active by default (UI-only — no command sent unless enabled)
   activeSourceB3 = 0x68;
   leftChannelB3 = null;
   rightChannelB3 = null;
+  activeFxIndex = null;
   elementRefs.mainlrBtn.classList.add("active");
 }
 
@@ -625,6 +696,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // outputs keep the last selected source.
   clearActiveMix();
   clearChannelSelection();
+  clearFxSelection();
   elementRefs.mainlrBtn.classList.remove("active");
 
   // Uncheck the enable checkbox

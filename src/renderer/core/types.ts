@@ -34,6 +34,7 @@ export interface ElementRefs {
   monRDest: HTMLSelectElement;
   mixButtons: HTMLElement;
   chButtons: HTMLElement;
+  fxButtons: HTMLElement;
   mainlrBtn: HTMLButtonElement;
   monEnable: HTMLInputElement;
   disconnectBtn: HTMLButtonElement;

@@ -99,6 +99,7 @@ export interface SqApi {
   setMonitorOutput(side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   setPafl(b3: number, on: boolean): Promise<boolean>;
   setOutputPatch(sourceB3: number, destType: number, destChannel: number): Promise<boolean>;
+  setFxOutputPatch(fxIndex: number, side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   requestDump(): Promise<boolean>;
   applyRouting(data: {
     inputs?: SnapshotInput[];
