@@ -87,6 +87,79 @@ function populateMonitorSelects(): void {
   elementRefs.monRDest.value = "";
   // Re-apply usage annotations if a routing snapshot has already arrived.
   applyOutputUsage();
+  // Source buttons stay locked until both outputs are chosen.
+  updateSourceLock();
+}
+
+// ── source lock (until both outputs are chosen) ─────────────────────
+
+/**
+ * Keep the source buttons (mixes, channels, FX returns, Main LR) disabled
+ * until both L and R output selectors have a value — there is nothing to
+ * route into otherwise. The "Применять" checkbox stays available: enabling
+ * it before the outputs are chosen is what captures the routing snapshot.
+ */
+function updateSourceLock(): void {
+  const locked = !elementRefs.monLDest.value || !elementRefs.monRDest.value;
+  elementRefs.mainlrBtn.disabled = locked;
+  for (const group of [elementRefs.mixButtons, elementRefs.chButtons, elementRefs.fxButtons]) {
+    for (const b of group.querySelectorAll<HTMLButtonElement>("button")) {
+      b.disabled = locked;
+    }
+  }
+}
+
+// ── "Применять" session: save / restore output routing ──────────────
+
+/** Output routing captured when "Применять" was enabled; restored on disable. */
+let savedOutputs: SnapshotOutput[] | null = null;
+
+/**
+ * Outputs ("destType:destChannel") borrowed by this session — every output
+ * that was selected in L/R while "Применять" was on. Only these are restored
+ * on disable; everything else kept its original routing untouched.
+ */
+let borrowedKeys: Set<string> | null = null;
+
+/** Keys ("destType:destChannel") of the outputs currently chosen in L/R. */
+function selectedDestKeys(): string[] {
+  const keys: string[] = [];
+  for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
+    const dest = parseDest(sel);
+    if (dest) keys.push(`${dest.destType}:${dest.destChannel}`);
+  }
+  return keys;
+}
+
+/** Remember outputs chosen while the session is active — they get restored. */
+function recordBorrowedOutputs(): void {
+  if (!monEnabled() || !borrowedKeys) return;
+  for (const key of selectedDestKeys()) borrowedKeys.add(key);
+}
+
+/**
+ * Checkbox handler. Enabling snapshots the console's current output routing
+ * (before any monitor routing overwrites it) — this works even before the
+ * L/R outputs are chosen. Disabling sends the snapshot back for the borrowed
+ * outputs only, returning them to their pre-session state.
+ */
+async function onMonEnableChange(): Promise<void> {
+  if (monEnabled()) {
+    savedOutputs = lastOutputs ? [...lastOutputs] : [];
+    borrowedKeys = new Set(selectedDestKeys());
+    await routeActiveSelection();
+  } else {
+    const outputs = savedOutputs;
+    const keys = borrowedKeys;
+    savedOutputs = null;
+    borrowedKeys = null;
+    if (outputs && keys && keys.size > 0) {
+      const restore = outputs.filter((o) => keys.has(`${o.dest}:${o.destChannel}`));
+      if (restore.length > 0) {
+        await window.sq.restoreOutputs(restore);
+      }
+    }
+  }
 }
 
 // ── output usage annotations ────────────────────────────────────────
@@ -319,6 +392,7 @@ function buildMixButtons(): void {
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
     container.appendChild(btn);
   }
+  updateSourceLock();
 }
 
 // ── FX return buttons ───────────────────────────────────────────────
@@ -368,6 +442,7 @@ function buildFxButtons(): void {
     btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
+  updateSourceLock();
 }
 
 // ── channel buttons ─────────────────────────────────────────────────
@@ -515,6 +590,7 @@ export function buildChannelButtons(): void {
   // Re-apply the latest readings so a rebuild (stereo pairs changed) doesn't
   // blank the bars until the next meter packet.
   if (lastMeters) applyMeters(lastMeters);
+  updateSourceLock();
 }
 
 /** Click handler for a stereo pair — routes left ch to L out, right ch to R out. */
@@ -576,6 +652,9 @@ export function updateChannelNames(inputs: SnapshotInput[]): void {
 
 export function reset(): void {
   lastOutputs = null; // fresh session — no stale usage annotations
+  savedOutputs = null; // no borrow session to restore
+  borrowedKeys = null;
+  elementRefs.monEnable.checked = false; // fresh session — start unchecked
   populateMonitorSelects();
   buildMixButtons();
   state.stereoPairs = [];
@@ -599,14 +678,21 @@ elementRefs.monLDest.addEventListener("change", async () => {
   if ([...elementRefs.monRDest.options].some((o) => o.value === neighborVal)) {
     elementRefs.monRDest.value = neighborVal;
   }
+  updateSourceLock();
+  recordBorrowedOutputs();
   // Re-route the active source to the new L output.
   await routeActiveSelection();
 });
-elementRefs.monRDest.addEventListener("change", () => routeActiveSelection());
+elementRefs.monRDest.addEventListener("change", () => {
+  updateSourceLock();
+  recordBorrowedOutputs();
+  routeActiveSelection();
+});
 
-// Enabling "Применять" immediately routes the current selection.
+// "Применять": enabling captures the output-routing snapshot and routes the
+// current selection; disabling restores the captured routing.
 elementRefs.monEnable.addEventListener("change", () => {
-  if (monEnabled()) routeActiveSelection();
+  void onMonEnableChange();
 });
 
 // Main LR button — routes Main LR like a mix selection
@@ -692,13 +778,14 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   e.preventDefault();
 
-  // Clear all selections and highlights. The routing is left as-is — the
-  // outputs keep the last selected source.
+  // Clear all selections and highlights.
   clearActiveMix();
   clearChannelSelection();
   clearFxSelection();
   elementRefs.mainlrBtn.classList.remove("active");
 
-  // Uncheck the enable checkbox
+  // Uncheck the enable checkbox — this also restores the saved output
+  // routing (same path as unchecking by click).
   elementRefs.monEnable.checked = false;
+  void onMonEnableChange();
 });

@@ -483,6 +483,44 @@ class SQController {
     return { ok: true, applied, skipped };
   }
 
+  /**
+   * Restore previously captured output patches — used when the monitor tab's
+   * "Применять" session ends, to return the borrowed outputs to the routing
+   * they had before the session started.
+   */
+  restoreOutputs(outputs: OutputPatch[]): {
+    ok: boolean;
+    applied: number;
+    skipped: number;
+    error?: string;
+  } {
+    if (!this.connected) {
+      return { ok: false, applied: 0, skipped: 0, error: "Not connected" };
+    }
+    let applied = 0;
+    let skipped = 0;
+    for (const out of outputs ?? []) {
+      const record = this.encodeOutputPatch(out);
+      if (!record) {
+        skipped++;
+        continue;
+      }
+      this.sendPatchFrame(record.ch, record.modifier, record.valLo, record.valHi);
+      applied++;
+    }
+    this.send("sq:log", {
+      level: "ok",
+      msg: `Восстановлен роутинг выходов: ${applied} патчей${skipped ? `, ${skipped} пропущено` : ""}.`,
+    });
+    // In demo mode the model just changed — flush so the UI updates. In live
+    // mode the mixer echoes the patches back and the normal DSP path updates
+    // the model.
+    if (this.demoMode) {
+      this.send("sq:routing", this.snapshot());
+    }
+    return { ok: true, applied, skipped };
+  }
+
   /** Reconstruct the 4 payload fields of an output-patch frame from a saved record. */
   private encodeOutputPatch(out: OutputPatch): {
     ch: number;
@@ -1053,6 +1091,9 @@ function registerIpc(): void {
   ipcMain.handle("sq:startDemo", () => controller.startDemo());
   ipcMain.handle("sq:applyRouting", (_e, data: { inputs?: InputPatch[]; outputs?: OutputPatch[] }) =>
     controller.applyRouting(data)
+  );
+  ipcMain.handle("sq:restoreOutputs", (_e, outputs: OutputPatch[]) =>
+    controller.restoreOutputs(outputs)
   );
   ipcMain.handle("sq:setInputPatch", (_e, destB3: number, source: number, sourceChannel: number) => {
     controller.setInputPatch(destB3, source, sourceChannel);

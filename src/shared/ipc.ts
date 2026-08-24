@@ -105,6 +105,8 @@ export interface SqApi {
     inputs?: SnapshotInput[];
     outputs?: SnapshotOutput[];
   }): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
+  /** Re-apply previously captured output patches (monitor session restore). */
+  restoreOutputs(outputs: SnapshotOutput[]): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
   setInputPatch(destB3: number, source: number, sourceChannel: number): Promise<boolean>;
   startDemo(): Promise<ConnectResult>;
   getStatus(): Promise<StatusPayload>;

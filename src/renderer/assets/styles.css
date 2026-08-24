@@ -1194,7 +1194,7 @@ h2.stereo-diff:hover::after {
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.mix-btn:hover {
+.mix-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }
@@ -1240,7 +1240,7 @@ h2.stereo-diff:hover::after {
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.fx-btn:hover {
+.fx-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }
@@ -1253,6 +1253,14 @@ h2.stereo-diff:hover::after {
 
 .fx-btn:active {
   transform: scale(0.96);
+}
+
+/* ── Disabled source buttons (outputs not chosen yet) ──────────────── */
+.mix-btn:disabled,
+.ch-btn:disabled,
+.fx-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Channel buttons ───────────────────────────────────────────────── */
@@ -1336,7 +1344,7 @@ h2.stereo-diff:hover::after {
   visibility: visible;
 }
 
-.ch-btn:hover {
+.ch-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }

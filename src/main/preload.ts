@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld("sq", {
     data: { inputs?: SnapshotPayload["inputs"]; outputs?: SnapshotPayload["outputs"] }
   ): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }> =>
     ipcRenderer.invoke("sq:applyRouting", data),
+  restoreOutputs: (
+    outputs: SnapshotPayload["outputs"]
+  ): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }> =>
+    ipcRenderer.invoke("sq:restoreOutputs", outputs),
   setInputPatch: (destB3: number, source: number, sourceChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setInputPatch", destB3, source, sourceChannel),
   startDemo: (): Promise<ConnectResult> => ipcRenderer.invoke("sq:startDemo"),
