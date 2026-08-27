@@ -274,6 +274,32 @@ const INPUT_SOURCES: { value: number; label: string }[] = [
   { value: 0x04, label: "I/O Port" },
 ];
 
+/**
+ * Labels for the local line-input channels that follow the XLR bank:
+ * ST1, ST2 (1/4" TRS pairs) and ST3 (3.5mm mini jack on the surface).
+ */
+const LOCAL_LINE_LABELS = ["ST1 L", "ST1 R", "ST2 L", "ST2 R", "ST3 L", "ST3 R"];
+
+/** Option label for a 0-based local source channel: XLR number or ST label. */
+function localInputLabel(ch0: number): string {
+  const spec = state.modelSpec;
+  if (!spec) return String(ch0 + 1);
+  const lineIdx = ch0 - spec.xlrInputs;
+  return lineIdx >= 0 && lineIdx < LOCAL_LINE_LABELS.length
+    ? LOCAL_LINE_LABELS[lineIdx]
+    : String(ch0 + 1);
+}
+
+/** Option label for a 0-based local stereo pair: "17-18" or "ST1". */
+function localStereoPairLabel(leftIdx: number): string {
+  const spec = state.modelSpec;
+  if (!spec) return `${leftIdx + 1}-${leftIdx + 2}`;
+  const pairIdx = Math.floor((leftIdx - spec.xlrInputs) / 2);
+  return leftIdx >= spec.xlrInputs && pairIdx < 3
+    ? `ST${pairIdx + 1}`
+    : `${leftIdx + 1}-${leftIdx + 2}`;
+}
+
 /** Max channels available for a given source type (1-based count). */
 function maxSourceChannel(source: number): number {
   switch (source) {
@@ -296,7 +322,7 @@ function populateInputNumberSelect(
   for (let i = 0; i < max; i++) {
     const opt = document.createElement("option");
     opt.value = String(i);
-    opt.textContent = String(i + 1);
+    opt.textContent = source === 0x01 ? localInputLabel(i) : String(i + 1);
     selectEl.appendChild(opt);
   }
   const v = currentValue != null ? currentValue : Number(selectEl.dataset.prev);
@@ -322,7 +348,8 @@ function populateStereoInputNumberSelect(
     const leftIdx = p * 2;
     const opt = document.createElement("option");
     opt.value = String(leftIdx);
-    opt.textContent = `${leftIdx + 1}-${leftIdx + 2}`;
+    opt.textContent =
+      source === 0x01 ? localStereoPairLabel(leftIdx) : `${leftIdx + 1}-${leftIdx + 2}`;
     selectEl.appendChild(opt);
   }
   // Round current value down to nearest even (left side of pair)

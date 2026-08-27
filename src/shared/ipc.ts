@@ -15,7 +15,17 @@ export interface ModelSpec {
   id: number;
   name: string;
   inputChannels: number;
+  /** Local mic/line inputs on XLR sockets (16/24/32). */
+  xlrInputs: number;
+  /** Local line inputs on jack sockets: ST1, ST2 (TRS) + ST3 (3.5mm) — 6 on all models. */
+  lineInputs: number;
+  /** Total local input sockets (XLR + line), continuing one bank. */
   localInputs: number;
+  /** Local line outputs on XLR sockets (12/14/16). */
+  xlrOutputs: number;
+  /** Local line outputs on TRS jack sockets (A/B) — 2 on all models. */
+  trsOutputs: number;
+  /** Total assignable local outputs (XLR + TRS). */
   localOutputs: number;
   usbChannels: number;
   mixBuses: number;
@@ -98,11 +108,14 @@ export interface SqApi {
   setMonitorOutput(side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   setPafl(b3: number, on: boolean): Promise<boolean>;
   setOutputPatch(sourceB3: number, destType: number, destChannel: number): Promise<boolean>;
+  setFxOutputPatch(fxIndex: number, side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   requestDump(): Promise<boolean>;
   applyRouting(data: {
     inputs?: SnapshotInput[];
     outputs?: SnapshotOutput[];
   }): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
+  /** Re-apply previously captured output patches (monitor session restore). */
+  restoreOutputs(outputs: SnapshotOutput[]): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
   setInputPatch(destB3: number, source: number, sourceChannel: number): Promise<boolean>;
   startDemo(): Promise<ConnectResult>;
   getStatus(): Promise<StatusPayload>;

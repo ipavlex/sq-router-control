@@ -6,6 +6,7 @@
  */
 import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import * as path from "node:path";
+import * as fs from "node:fs";
 import { Connection, VersionInfo, DspFrame } from "./transport/connection";
 import { RoutingModel, InputPatch, OutputPatch, labelToB3, b3ToLabel, MONITOR_LABEL_TO_SOURCE, RoutingSnapshot } from "./routing";
 import { modelSpec, SQModelSpec } from "./models";
@@ -104,7 +105,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       { kind: "output", sourceB3: 0x5e, dest: Dest.Local, destChannel0: 4 },
       { kind: "output", sourceB3: 0x5f, dest: Dest.Local, destChannel0: 5 },
       { kind: "fx", fxIndex: 0, lr: "L", dest: Dest.Local, destChannel0: 7 },
-      { kind: "fx", fxIndex: 0, lr: "R", dest: Dest.Local, destChannel0: 7 },
+      { kind: "fx", fxIndex: 0, lr: "R", dest: Dest.Local, destChannel0: 8 },
       { kind: "fx", fxIndex: 1, lr: "L", dest: Dest.USB, destChannel0: 4 },
       { kind: "fx", fxIndex: 1, lr: "R", dest: Dest.USB, destChannel0: 5 },
       { kind: "monitor", source: 1, dest: Dest.Local, destChannel0: 6 },
@@ -143,7 +144,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       { kind: "fx", fxIndex: 0, lr: "L", dest: Dest.SLink, destChannel0: 4 },
       { kind: "fx", fxIndex: 0, lr: "R", dest: Dest.SLink, destChannel0: 5 },
       { kind: "fx", fxIndex: 1, lr: "L", dest: Dest.Local, destChannel0: 7 },
-      { kind: "fx", fxIndex: 1, lr: "R", dest: Dest.Local, destChannel0: 7 },
+      { kind: "fx", fxIndex: 1, lr: "R", dest: Dest.Local, destChannel0: 8 },
       { kind: "monitor", source: 2, dest: Dest.Local, destChannel0: 6 },
     ],
   },
@@ -345,6 +346,33 @@ class SQController {
   }
 
   /**
+   * Route one side of an FX return to a physical output.
+   * fxIndex: 0-based FX engine (FX 1-4).
+   * side: "L" | "R" — FX returns are patched per side (modifier 0x16 / 0x17).
+   * destType: 0x1a Local, 0x1b ME, 0x1c SLink, 0x1d USB, 0x1e IOPort.
+   * destChannel: 1-based channel number on that output bus.
+   */
+  setFxOutputPatch(fxIndex: number, side: "L" | "R", destType: number, destChannel: number): void {
+    const ch0 = destChannel - 1;
+    const destName =
+      destType === 0x1a ? "Local" :
+      destType === 0x1b ? "ME" :
+      destType === 0x1c ? "SLink" :
+      destType === 0x1d ? "USB" :
+      destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
+
+    this.sendPatchFrame(fxIndex, side === "L" ? 0x16 : 0x17, ch0 & 0xff, destType & 0xff);
+    this.send("sq:log", {
+      level: "dsp",
+      msg: `Route FX${fxIndex + 1} ${side} → ${destName} Out ${destChannel}`,
+    });
+    // In demo mode the model changed locally — flush so the UI reflects it.
+    if (this.demoMode) {
+      this.send("sq:routing", this.snapshot());
+    }
+  }
+
+  /**
    * Patch a single input channel to a new physical source.
    * destB3: mixer input channel address (0x00–0x2f).
    * source: InputPatchSource (0x01 Local, 0x02 SLink, 0x03 USB, 0x04 IOPort).
@@ -455,6 +483,44 @@ class SQController {
     return { ok: true, applied, skipped };
   }
 
+  /**
+   * Restore previously captured output patches — used when the monitor tab's
+   * "Применять" session ends, to return the borrowed outputs to the routing
+   * they had before the session started.
+   */
+  restoreOutputs(outputs: OutputPatch[]): {
+    ok: boolean;
+    applied: number;
+    skipped: number;
+    error?: string;
+  } {
+    if (!this.connected) {
+      return { ok: false, applied: 0, skipped: 0, error: "Not connected" };
+    }
+    let applied = 0;
+    let skipped = 0;
+    for (const out of outputs ?? []) {
+      const record = this.encodeOutputPatch(out);
+      if (!record) {
+        skipped++;
+        continue;
+      }
+      this.sendPatchFrame(record.ch, record.modifier, record.valLo, record.valHi);
+      applied++;
+    }
+    this.send("sq:log", {
+      level: "ok",
+      msg: `Восстановлен роутинг выходов: ${applied} патчей${skipped ? `, ${skipped} пропущено` : ""}.`,
+    });
+    // In demo mode the model just changed — flush so the UI updates. In live
+    // mode the mixer echoes the patches back and the normal DSP path updates
+    // the model.
+    if (this.demoMode) {
+      this.send("sq:routing", this.snapshot());
+    }
+    return { ok: true, applied, skipped };
+  }
+
   /** Reconstruct the 4 payload fields of an output-patch frame from a saved record. */
   private encodeOutputPatch(out: OutputPatch): {
     ch: number;
@@ -524,7 +590,7 @@ class SQController {
         fwB: 9,
         build: 4,
       };
-      const spec = modelSpec(0x01); // SQ-5: 16 local in, 8 local out
+      const spec = modelSpec(0x01); // SQ-5: 16 local in, 12 XLR + 2 TRS out
 
       this.model.reset();
       this.resetSceneState();
@@ -723,13 +789,9 @@ class SQController {
         this.applyFxPatch(0, "R", toUsb ? 0x1d : 0x1a, toUsb ? 1 : 7);
         return `FX1 Return → ${toUsb ? "USB Out 1/2" : "Local Out 8"}`;
       },
-      // Recall the next demo scene so the "current scene" tracks visibly.
-      () => {
-        const names = ["Soundcheck", "Sunday Service", "Rehearsal"];
-        const next = ((this.currentSceneId ?? -1) + 1) % names.length;
-        this.currentSceneId = next;
-        return `Scene recalled: ${next + 1} — ${names[next]}`;
-      },
+      // NOTE: scene recall is NOT part of the periodic simulation — in demo
+      // mode the scene changes only when the user presses "Обновить"
+      // (see demoRefresh).
     ];
 
     let tick = 0;
@@ -779,8 +841,10 @@ class SQController {
 
   /**
    * Demo-mode "Обновить": regenerate a completely new simulated routing —
-   * different channel names, different stereo pairs, different patching.
-   * Pushes the fresh snapshot to the renderer and returns it.
+   * different channel names, different stereo pairs, different patching —
+   * and recall the next demo scene. The scene changes ONLY here: the
+   * periodic simulation never touches it. Pushes the fresh snapshot to the
+   * renderer and returns it.
    */
   demoRefresh(): RoutingSnapshot {
     if (!this.demoMode) return this.snapshot();
@@ -788,6 +852,11 @@ class SQController {
     const generation = ++this.demoRefreshGen;
     const variant = generation % DEMO_VARIANTS.length;
     const config = DEMO_VARIANTS[variant];
+
+    // Recall the next demo scene (cyclically).
+    const sceneNames = ["Soundcheck", "Sunday Service", "Rehearsal"];
+    const nextScene = ((this.currentSceneId ?? -1) + 1) % sceneNames.length;
+    this.currentSceneId = nextScene;
 
     this.model.reset();
     this.model.routingBlockBytes = 928;
@@ -813,6 +882,10 @@ class SQController {
     }
 
     const snap = this.snapshot();
+    this.send("sq:log", {
+      level: "ok",
+      msg: `Scene recalled: ${nextScene + 1} — ${sceneNames[nextScene]}`,
+    });
     this.send("sq:log", {
       level: "ok",
       msg: `Демо обновлено (вариант ${variant + 1}/${DEMO_VARIANTS.length}): ${snap.inputs.length} входов, ${snap.stereoPairs.length} стерео-пар.`,
@@ -956,6 +1029,16 @@ class SQController {
 const controller = new SQController();
 
 function createWindow(): void {
+  // App icon shipped next to main.js (see webpack.config.js). In dev mode the
+  // process runs from the Electron binary, so the Dock would otherwise show
+  // the generic Electron icon — override it at runtime. The packaged app
+  // embeds its icon via electron-builder; the file may not exist there.
+  // Note: dock.setIcon() only accepts PNG/JPEG (NativeImage), not .icns.
+  const iconPath = path.join(__dirname, "icon.png");
+  if (process.platform === "darwin" && app.dock && fs.existsSync(iconPath)) {
+    app.dock.setIcon(iconPath);
+  }
+
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 820,
@@ -963,6 +1046,7 @@ function createWindow(): void {
     minHeight: 600,
     backgroundColor: "#0f1115",
     title: "SQ Router Control",
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -1014,6 +1098,10 @@ function registerIpc(): void {
     controller.setOutputPatch(sourceB3, destType, destChannel);
     return true;
   });
+  ipcMain.handle("sq:setFxOutputPatch", (_e, fxIndex: number, side: "L" | "R", destType: number, destChannel: number) => {
+    controller.setFxOutputPatch(fxIndex, side, destType, destChannel);
+    return true;
+  });
   ipcMain.handle("sq:requestDump", () => {
     controller.requestDump();
     return true;
@@ -1021,6 +1109,9 @@ function registerIpc(): void {
   ipcMain.handle("sq:startDemo", () => controller.startDemo());
   ipcMain.handle("sq:applyRouting", (_e, data: { inputs?: InputPatch[]; outputs?: OutputPatch[] }) =>
     controller.applyRouting(data)
+  );
+  ipcMain.handle("sq:restoreOutputs", (_e, outputs: OutputPatch[]) =>
+    controller.restoreOutputs(outputs)
   );
   ipcMain.handle("sq:setInputPatch", (_e, destB3: number, source: number, sourceChannel: number) => {
     controller.setInputPatch(destB3, source, sourceChannel);

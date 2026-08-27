@@ -4,13 +4,17 @@
       <stop offset="0%" stop-color="#1a2030"/>
       <stop offset="100%" stop-color="#0d1018"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4f9cf9"/>
-      <stop offset="100%" stop-color="#2f6fc0"/>
+    <linearGradient id="green" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4fe2a0"/>
+      <stop offset="100%" stop-color="#2fa874"/>
     </linearGradient>
     <linearGradient id="amber" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#5ad8ff"/>
-      <stop offset="100%" stop-color="#3a8fd0"/>
+      <stop offset="0%" stop-color="#ffc95e"/>
+      <stop offset="100%" stop-color="#e09a2e"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff7a85"/>
+      <stop offset="100%" stop-color="#d94a56"/>
     </linearGradient>
   </defs>
 
@@ -20,42 +24,26 @@
   <!-- Subtle inner border -->
   <rect x="84" y="84" width="856" height="856" rx="184" ry="184" fill="none" stroke="#272d39" stroke-width="4"/>
 
-  <!-- Fader channel strips (left side inputs) -->
-  <g transform="translate(180, 220)">
-    <!-- strip 1 -->
-    <rect x="0" y="0" width="44" height="360" rx="10" fill="#1c212b" stroke="#272d39" stroke-width="3"/>
-    <rect x="16" y="70" width="12" height="80" rx="4" fill="url(#accent)"/>
-    <!-- strip 2 -->
-    <rect x="70" y="0" width="44" height="360" rx="10" fill="#1c212b" stroke="#272d39" stroke-width="3"/>
-    <rect x="86" y="160" width="12" height="80" rx="4" fill="url(#accent)"/>
-    <!-- strip 3 -->
-    <rect x="140" y="0" width="44" height="360" rx="10" fill="#1c212b" stroke="#272d39" stroke-width="3"/>
-    <rect x="156" y="120" width="12" height="80" rx="4" fill="url(#accent)"/>
-    <!-- strip 4 -->
-    <rect x="210" y="0" width="44" height="360" rx="10" fill="#1c212b" stroke="#272d39" stroke-width="3"/>
-    <rect x="226" y="40" width="12" height="80" rx="4" fill="url(#accent)"/>
+  <!-- Meter tracks (dark slots, like the app's meter bars) -->
+  <g fill="#1c212b" stroke="#272d39" stroke-width="3">
+    <rect x="176" y="250" width="96" height="600" rx="30"/>
+    <rect x="320" y="250" width="96" height="600" rx="30"/>
+    <rect x="464" y="250" width="96" height="600" rx="30"/>
+    <rect x="608" y="250" width="96" height="600" rx="30"/>
+    <rect x="752" y="250" width="96" height="600" rx="30"/>
   </g>
 
-  <!-- Routing connection lines -->
-  <g stroke="url(#amber)" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.9">
-    <path d="M 470 300 C 560 300, 600 420, 690 420"/>
-    <path d="M 470 380 C 560 380, 600 360, 690 360"/>
-    <path d="M 470 460 C 560 460, 600 510, 690 510"/>
-    <path d="M 470 540 C 560 540, 600 570, 690 570"/>
+  <!-- Meter fills, bottom-anchored; color follows the level like the app:
+       green (nominal), amber (warn), red (hot). -->
+  <g>
+    <rect x="176" y="640" width="96" height="210" rx="30" fill="url(#green)"/>
+    <rect x="320" y="490" width="96" height="360" rx="30" fill="url(#amber)"/>
+    <rect x="464" y="298" width="96" height="552" rx="30" fill="url(#red)"/>
+    <rect x="608" y="562" width="96" height="288" rx="30" fill="url(#green)"/>
+    <rect x="752" y="400" width="96" height="450" rx="30" fill="url(#amber)"/>
   </g>
 
-  <!-- Output nodes (right side) -->
-  <g transform="translate(700, 420)">
-    <rect x="0" y="-30" width="150" height="60" rx="14" fill="#1c212b" stroke="#272d39" stroke-width="3"/>
-    <circle cx="30" cy="0" r="11" fill="#3ecf8e"/>
-    <rect x="0" y="50" width="150" height="60" rx="14" fill="#1c212b" stroke="#272d39" stroke-width="3"/>
-    <circle cx="30" cy="80" r="11" fill="#f5b042"/>
-  </g>
-
-  <!-- "SQ" monogram badge -->
-  <g transform="translate(512, 800)">
-    <rect x="-120" y="-52" width="240" height="104" rx="26" fill="url(#accent)"/>
-    <text x="0" y="22" font-family="SF Mono, Menlo, monospace" font-size="64" font-weight="700"
-          fill="#ffffff" text-anchor="middle" letter-spacing="2">SQ</text>
-  </g>
+  <!-- Clip indicator above the hot (red) bar -->
+  <circle cx="512" cy="272" r="13" fill="#f0616d"/>
+  <circle cx="512" cy="272" r="20" fill="#f0616d" opacity="0.25"/>
 </svg>

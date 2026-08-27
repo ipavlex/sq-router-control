@@ -42,6 +42,16 @@ module.exports = [
       path: path.resolve(__dirname, "dist/main"),
       filename: "main.js",
     },
+    plugins: [
+      // Ship the app icon next to main.js so the Dock/window icon can be set
+      // at runtime in dev mode (the packaged app embeds it via
+      // electron-builder, which also picks up build/icon.icns for macOS).
+      new CopyPlugin({
+        patterns: [
+          { from: "build/icon.png", to: "icon.png" },
+        ],
+      }),
+    ],
   },
   {
     ...common,

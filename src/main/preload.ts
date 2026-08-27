@@ -24,11 +24,17 @@ contextBridge.exposeInMainWorld("sq", {
     ipcRenderer.invoke("sq:setPafl", b3, on),
   setOutputPatch: (sourceB3: number, destType: number, destChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setOutputPatch", sourceB3, destType, destChannel),
+  setFxOutputPatch: (fxIndex: number, side: "L" | "R", destType: number, destChannel: number): Promise<boolean> =>
+    ipcRenderer.invoke("sq:setFxOutputPatch", fxIndex, side, destType, destChannel),
   requestDump: (): Promise<boolean> => ipcRenderer.invoke("sq:requestDump"),
   applyRouting: (
     data: { inputs?: SnapshotPayload["inputs"]; outputs?: SnapshotPayload["outputs"] }
   ): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }> =>
     ipcRenderer.invoke("sq:applyRouting", data),
+  restoreOutputs: (
+    outputs: SnapshotPayload["outputs"]
+  ): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }> =>
+    ipcRenderer.invoke("sq:restoreOutputs", outputs),
   setInputPatch: (destB3: number, source: number, sourceChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setInputPatch", destB3, source, sourceChannel),
   startDemo: (): Promise<ConnectResult> => ipcRenderer.invoke("sq:startDemo"),
