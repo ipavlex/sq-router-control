@@ -80,6 +80,7 @@ export const state: RendererState = {
   modelSpec: null,
   stereoPairs: [],
   activeInputs: [],
+  channelStates: new Map(),
   currentSceneName: null,
   isDemoMode: false,
 };

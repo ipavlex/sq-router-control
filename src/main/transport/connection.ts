@@ -406,9 +406,25 @@ export class Connection extends EventEmitter {
 
   /**
    * Parse the 97376-byte ParamData blob. Only the offsets that are confirmed
-   * against firmware are decoded (channel names + channel-state events).
-   * Everything else is left to higher-level consumers via the 'dsp' events
-   * emitted here, which mirror the live-change frame format.
+   * against firmware (SQ5 FW 1.6) are decoded — see allen-heath-sq-tools
+   * sq-api for the full reverse-engineered offset map:
+   *
+   * 336-byte channel block at (884 + b3*336):
+   *   +0..15   name (16-byte null-padded ASCII)
+   *   +24/+26  input patch: source channel / source type (b3 ≤ 0x2f)
+   *   +84,85   HPF freq LE16          +87  HPF on/off byte
+   *   +121     gate on/off byte       +302 comp on/off byte
+   *   +304,305 delay duration LE16    +306 delay on/off byte
+   *   +324,325 trim LE16
+   *   +332     flags: bit0=polarity, bit1=mute
+   * Preamp gain: absolute offset 80028 + b3*336 (LE16; fits only for b3 ≤ 0x32).
+   * 300-byte fader/send section at (43520 + b3*300):
+   *   +0..67   bus 1-12 sends (stride 6)   +96,97 fader LE16   +98 pan byte
+   *   +114..133 FX 1-4 sends (stride 6)
+   *
+   * All values are re-emitted as synthetic 'dsp' events in the SAME format as
+   * live change frames, so a single consumer (MixerState.handleDsp) covers
+   * both the initial dump and subsequent live updates.
    */
   private _parseInitialState(payload: Buffer): void {
     const dsp = (
@@ -460,14 +476,43 @@ export class Connection extends EventEmitter {
           }
         }
 
+        // Input gain — separate preamp section later in the blob; guarded by
+        // length so it only fires for the channels that fit.
+        const gainOff = 80028 + b3 * 336;
+        if (gainOff + 2 <= payload.length) {
+          dsp(b3, 0x0c, 0x0c, 0x01, payload.readUInt16LE(gainOff)); // gain
+        }
+
+        // HPF (freq / on-off).
+        dsp(b3, 0x0e, 0x0d, 0x00, payload.readUInt16LE(blk + 84)); // freq
+        dsp(b3, 0x0e, 0x0c, 0x00, payload[blk + 87]); // on/off
+
+        // Gate / compressor / delay on-off.
+        dsp(b3, 0x0f, 0x0c, 0x00, payload[blk + 121]); // gate on/off
+        dsp(b3, 0x13, 0x0c, 0x00, payload[blk + 302]); // comp on/off
+        dsp(b3, 0x14, 0x0d, 0x00, payload.readUInt16LE(blk + 304)); // delay ms
+        dsp(b3, 0x14, 0x0c, 0x00, payload[blk + 306]); // delay on/off
+
+        // Trim.
+        dsp(b3, 0x0c, 0x0f, 0x00, payload.readUInt16LE(blk + 324));
+
         if (blk + 333 <= payload.length) {
           const flags = payload[blk + 332]; // bit0=polarity, bit1=mute
+          dsp(b3, 0x0c, 0x10, 0x00, flags & 0x01); // polarity
           dsp(b3, 0x07, 0x0c, 0x00, (flags >> 1) & 0x01); // mute
         }
       }
 
       if (sec + 134 <= payload.length) {
+        // Bus sends 1-12 (stride 6) and FX sends 1-4.
+        for (let bus = 0; bus < 12; bus++) {
+          dsp(b3, 0x07, 0x0e, 0x10 + bus, payload.readUInt16LE(sec + bus * 6));
+        }
         dsp(b3, 0x07, 0x0e, 0x20, payload.readUInt16LE(sec + 96)); // fader
+        dsp(b3, 0x07, 0x10, 0x20, payload[sec + 98]); // pan (byte 0..74)
+        for (let fx = 0; fx < 4; fx++) {
+          dsp(b3, 0x07, 0x0e, 0x23 + fx, payload.readUInt16LE(sec + 114 + fx * 6));
+        }
       }
     }
 

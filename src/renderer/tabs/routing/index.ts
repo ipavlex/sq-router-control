@@ -1148,18 +1148,39 @@ function mirrorScroll(srcWrap: HTMLElement, dstWrap: HTMLElement): void {
 
 // ── snapshot handling ────────────────────────────────────────────────
 
+/** Identity of the last rendered inputs list — detects state-only updates. */
+let lastInputsKey = "";
+
+function inputsKey(inputs: SnapshotInput[]): string {
+  return JSON.stringify(inputs.map((i) => [i.destB3, i.source, i.sourceChannel, i.name]));
+}
+
 /**
  * Apply a routing snapshot to the tab: update stereo pairs first (rebuilding
- * the monitor channel grid if they changed), then both tables.
+ * the monitor channel grid if they changed), then both tables. When only
+ * channel state changed (faders/mutes/gains), the snapshot is recorded but
+ * the tables are left as-is — no visible routing change, no rebuild.
  */
 export function onRoutingSnapshot(snapshot: SnapshotPayload): void {
   // Update stereo pairs FIRST so table merging uses fresh data.
   const pairsKey = JSON.stringify(snapshot.stereoPairs || []);
-  if (pairsKey !== JSON.stringify(state.stereoPairs)) {
+  const pairsChanged = pairsKey !== JSON.stringify(state.stereoPairs);
+  if (pairsChanged) {
     state.stereoPairs = snapshot.stereoPairs || [];
     buildChannelButtons();
     if (!editInputsFrozen) editInputsBuilt = false; // force rebuild of editable table
   }
+  // Channel state (fader / mute / gain / …) — decoded from the initial dump
+  // and refreshed by live DSP frames. Kept in renderer state for future use;
+  // not displayed in the table for now.
+  state.channelStates = new Map((snapshot.channels || []).map((c) => [c.b3, c]));
+
+  const iKey = inputsKey(snapshot.inputs);
+  if (!pairsChanged && iKey === lastInputsKey) {
+    // Same routing — nothing visible changed in this tab.
+    return;
+  }
+  lastInputsKey = iKey;
   renderInputs(snapshot.inputs);
   // After the initial burst the Input Patching table is frozen — later console
   // routing changes must not alter it (selectors stay active for editing).
@@ -1190,6 +1211,8 @@ export function reset(): void {
   lastUploadedSet = null;
   updateActivePatchingTitle();
   state.activeInputs = [];
+  state.channelStates = new Map();
+  lastInputsKey = "";
   clearMeters();
   elementRefs.editInputTbody.innerHTML = "";
   elementRefs.editSelAll.checked = false;
