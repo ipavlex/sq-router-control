@@ -185,7 +185,13 @@ class SQController {
     return this.demoMode ? this.demoVersion : this.conn?.version ?? null;
   }
 
-  connect(host: string, port?: number): Promise<{ ok: true; version: VersionInfo } | { ok: false; error: string }> {
+  connect(
+    host: string,
+    port?: number
+  ): Promise<
+    | { ok: true; version: VersionInfo; spec: SQModelSpec }
+    | { ok: false; error: string }
+  > {
     // Tear down any previous session.
     this.disconnect();
 
@@ -203,7 +209,13 @@ class SQController {
 
     return conn
       .connect()
-      .then((version) => ({ ok: true as const, version }))
+      .then((version) => ({
+        ok: true as const,
+        version,
+        // The renderer derives Local/SLink/USB input counts and labels from
+        // the spec — without it the Input Patching selects fall back to 48.
+        spec: modelSpec(version.model),
+      }))
       .catch((err: NodeJS.ErrnoException) => {
         const msg =
           err && err.code === "ECONNREFUSED"
