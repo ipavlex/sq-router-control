@@ -987,6 +987,23 @@ class SQController {
       const wasState = this.mixer.handleDsp(d);
       if (wasRouting || wasState) dirty = true;
 
+      // Scene-recall confirmation: F7 02 02 1c [sceneId] 00 FF FF — 0-based
+      // scene id. The mixer sends it after every completed recall (console
+      // surface, softkeys, MIDI). The SQ binary protocol has no way to QUERY
+      // the active scene, so this live frame is the only source of truth;
+      // until one arrives the active scene is genuinely unknown.
+      if (d.category === 0x02 && d.register === 0x1c && d.ch < 300) {
+        if (this.currentSceneId !== d.ch) {
+          this.currentSceneId = d.ch;
+          dirty = true;
+          const name = this.sceneNames.get(d.ch);
+          this.send("sq:log", {
+            level: "ok",
+            msg: `Scene recalled: ${d.ch + 1}${name ? ` — ${name}` : " (name not yet known)"}`,
+          });
+        }
+      }
+
       // Surface routing-relevant raw frames for the live monitor.
       if (
         (d.category === 0x0b && d.register === 0x0d) ||
@@ -1023,6 +1040,26 @@ class SQController {
       else this.sceneNames.delete(id);
       dirty = true;
     });
+
+    // Scene-list dump summary: log the flag bytes seen on this console.
+    // Documented: 0x07 = stored scene, 0x00 = empty slot. If the active
+    // scene carries a distinctive flag, it will stand out in this log.
+    conn.on(
+      "sceneList",
+      (records: { id: number; flag: number; name: string | null }[]) => {
+        const namedFlags = Array.from(
+          new Set(records.filter((r) => r.name).map((r) => r.flag))
+        )
+          .map((f) => `0x${f.toString(16)}`)
+          .join(", ");
+        this.send("sq:log", {
+          level: "frame",
+          msg: `Scene list: ${records.length} slots, ${
+            records.filter((r) => r.name).length
+          } named (stored-scene flags: ${namedFlags || "—"}).`,
+        });
+      }
+    );
 
     // Individual scene record after a recall / rename / store — treat the
     // most recent one as the active scene (heuristic; see currentSceneName).

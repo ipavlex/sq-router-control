@@ -298,6 +298,14 @@ export class Connection extends EventEmitter {
     setTimeout(() => this.tcp && this.tcp.write(encodeSubExtra1()), 40);
     setTimeout(() => this.tcp && this.tcp.write(encodeSubExtra2()), 80);
     setTimeout(() => this.tcp && this.tcp.write(encodeSubExtra3()), 120);
+    // Same scene-list trigger as the handshake — keeps the scene library (and
+    // any scene tracking derived from it) fresh across manual refreshes.
+    setTimeout(
+      () =>
+        this.tcp &&
+        this.tcp.write(Buffer.from([0xf7, 0x02, 0x02, 0x20, 0xff, 0xff, 0xff, 0xff])),
+      160
+    );
   }
 
   disconnect(): void {
@@ -362,10 +370,13 @@ export class Connection extends EventEmitter {
   }
 
   private _parseChannelInfo(payload: Buffer): void {
-    // Scene-list format: header [02 02 xx 00 00 00 00], then 18-byte records.
+    // Scene-list format: header [02 02 xx 00 00 00 00], then 18-byte records:
+    // [flag][name up to 16 bytes null-padded][pad]. Known flags: 0x07 = stored
+    // scene, 0x00 = empty slot. No active-scene marker is documented.
     if (payload.length > 7 && payload[0] === 0x02 && payload[1] === 0x02) {
       const STRIDE = 18;
       const numRecords = Math.floor((payload.length - 7) / STRIDE);
+      const records: { id: number; flag: number; name: string | null }[] = [];
       for (let i = 0; i < numRecords; i++) {
         const off = 7 + i * STRIDE;
         const flag = payload[off];
@@ -373,7 +384,11 @@ export class Connection extends EventEmitter {
         const end = nameEnd >= 0 && nameEnd < off + 17 ? nameEnd : off + 17;
         const name = payload.slice(off + 1, end).toString("ascii").trimEnd();
         this.emit("sceneName", i, flag !== 0 ? name : null);
+        records.push({ id: i, flag, name: flag !== 0 ? name : null });
       }
+      // One summary event per dump — lets the app log the flag bytes seen in
+      // the wild (if the active scene ever marks itself, it shows up here).
+      this.emit("sceneList", records);
       return;
     }
     // Full-state records sent after recall/rename/store:
