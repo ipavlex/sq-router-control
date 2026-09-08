@@ -412,10 +412,18 @@ class SQController {
       level: "dsp",
       msg: `Input ${destLabel} → ${srcLabel} ${sourceChannel + 1}`,
     });
-    // In demo mode the model changed locally — flush so the UI reflects it.
-    if (this.demoMode) {
-      this.send("sq:routing", this.snapshot());
+    // Demo: sendPatchFrame already updated the local model above. Live: the
+    // mixer does not echo app-initiated input patches back on the
+    // subscription stream, so the model (and with it the Active Patching
+    // table) would stay stale forever. Apply the patch optimistically to the
+    // local model — any later echo or full dump simply re-asserts the
+    // console's truth over this value.
+    if (!this.demoMode && this.conn?.connected) {
+      this.applyInputPatch(destB3, source, sourceChannel);
     }
+    // The model now reflects the requested routing — flush so the UI
+    // (Active Patching) updates immediately.
+    this.send("sq:routing", this.snapshot());
   }
 
   /** Force the mixer to re-send its full routing/state dump. */
