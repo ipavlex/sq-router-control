@@ -13,6 +13,7 @@ import { MixerState } from "./state";
 import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
 import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
+import { analyzeStereoTable } from "./paramdata-diagnostics";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -997,6 +998,13 @@ class SQController {
       dirty = true;
     });
 
+    // First large ParamData blob of the session — save it together with a
+    // stereo-table report so firmware-specific layout shifts can be diagnosed
+    // (see paramdata-diagnostics.ts). Files are overwritten on each reconnect.
+    conn.on("paramDataSize", (size: number, payload: Buffer) => {
+      this.dumpParamData(payload, conn.version);
+    });
+
     // Scene library updates (full list dump arrives on connect).
     conn.on("sceneName", (id: number, name: string | null) => {
       if (name) this.sceneNames.set(id, name);
@@ -1079,6 +1087,44 @@ class SQController {
     conn.on("error", (err: Error) => {
       this.send("sq:log", { level: "error", msg: `Connection error: ${err.message}` });
     });
+  }
+
+  /**
+   * Save the raw ParamData blob plus a stereo-table analysis report under
+   * userData/diagnostics. Called once per connection (first large blob).
+   */
+  private dumpParamData(payload: Buffer, version: VersionInfo | null): void {
+    try {
+      const dir = path.join(app.getPath("userData"), "diagnostics");
+      fs.mkdirSync(dir, { recursive: true });
+      const binPath = path.join(dir, "paramdata-dump.bin");
+      const txtPath = path.join(dir, "paramdata-stereo.txt");
+      fs.writeFileSync(binPath, payload);
+      const diag = analyzeStereoTable(payload);
+      fs.writeFileSync(txtPath, diag.report, "utf8");
+      const fw = version
+        ? ` ${version.modelName} FW ${version.fwA}.${version.fwB}`
+        : "";
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Diagnostics: ParamData saved (${payload.length} bytes${fw}): ${binPath}`,
+      });
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Diagnostics: stereo report: ${txtPath}`,
+      });
+      if (diag.bestOffset !== null) {
+        this.send("sq:log", {
+          level: "frame",
+          msg: `Diagnostics: best-matching stereo-table offset: ${diag.bestOffset}`,
+        });
+      }
+    } catch (e) {
+      this.send("sq:log", {
+        level: "warn",
+        msg: `Diagnostics: failed to write dump: ${(e as Error).message}`,
+      });
+    }
   }
 }
 

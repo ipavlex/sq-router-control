@@ -36,6 +36,7 @@ import {
 } from "./frame";
 import { BufferReader } from "./buffer";
 import { modelName } from "../models";
+import { decodeStereoPairs } from "../stereo-links";
 import { decodeMeterMessage, resetMeters, MetersPayload } from "../meters";
 
 export const SQ_TCP_PORT = 51326;
@@ -331,7 +332,7 @@ export class Connection extends EventEmitter {
       // versions — the original hard-coded 97376 check rejected other builds).
       if (!this._initialStateParsed && frame.payload.length >= 80000) {
         this._initialStateParsed = true;
-        this.emit("paramDataSize", frame.payload.length);
+        this.emit("paramDataSize", frame.payload.length, frame.payload);
         this._parseInitialState(frame.payload);
       }
     }
@@ -517,25 +518,13 @@ export class Connection extends EventEmitter {
     }
 
     // ── Stereo-link table ──────────────────────────────────────────────
-    // Located at offset 81548 in the ParamData blob: 48 × 4-byte entries.
-    //   [u16LE target] [flags] [0xfe]
-    // flags 0x0f = mono / left side; flags 0x10 = right side of a stereo pair.
-    // When linked, the right channel's `target` points to the left partner's b3.
-    const STEREO_TABLE = 81548;
-    const STEREO_STRIDE = 4;
-    const pairs: number[][] = [];
-    for (let b3 = 0; b3 <= 0x2f; b3++) {
-      const off = STEREO_TABLE + b3 * STEREO_STRIDE;
-      if (off + 4 > payload.length) break;
-      const target = payload.readUInt16LE(off);
-      const flags = payload[off + 2];
-      if (flags === 0x10 && target < b3) {
-        pairs.push([target, b3]);
-      }
-    }
-    if (pairs.length > 0) {
-      this.emit("stereoPairs", pairs);
-    }
+    // Fixed offset in the ParamData blob, decoded via stereo-links.ts.
+    // Two link encodings (classic right-side-backlink and slot-pair) — see
+    // the module docs. Validated against a real SQ-5 dump: 9/9 pairs.
+    const pairs = decodeStereoPairs(payload);
+    // Always emit: an empty list is meaningful (console has no linked pairs)
+    // and must clear any stale model state.
+    this.emit("stereoPairs", pairs);
   }
 
   private _startKeepalive(): void {
