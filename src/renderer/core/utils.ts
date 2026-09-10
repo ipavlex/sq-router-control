@@ -48,6 +48,7 @@ export const elementRefs: ElementRefs = {
   updateStat: $("#update-stat"),
   log: $("#log"),
   clearLog: $("#clear-log"),
+  markLog: $("#mark-log"),
   saveRoutingBtn: $("#save-routing-btn"),
   topbarScene: $("#topbar-scene"),
   saveFeedback: $("#save-feedback"),

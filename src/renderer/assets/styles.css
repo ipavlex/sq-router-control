@@ -1006,6 +1006,21 @@ h2.stereo-diff:hover::after {
   white-space: pre-wrap;
 }
 
+/* Experiment mark separator (button / M key) */
+.log .line.mark {
+  background: rgba(56, 132, 255, 0.12);
+  border-top: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
+  margin: 2px 0;
+}
+.log .line.mark .lvl.mark {
+  color: var(--accent);
+}
+.log .line.mark .msg {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* ── Scrollbars ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 10px;

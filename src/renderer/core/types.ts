@@ -51,6 +51,7 @@ export interface ElementRefs {
   updateStat: HTMLElement;
   log: HTMLElement;
   clearLog: HTMLButtonElement;
+  markLog: HTMLButtonElement;
   saveRoutingBtn: HTMLButtonElement;
   topbarScene: HTMLElement;
   saveFeedback: HTMLElement;

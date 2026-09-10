@@ -1142,19 +1142,64 @@ class SQController {
     });
 
     // Meter-packet inventory — one log line per distinct packet shape seen
-    // on the UDP meter port. Exists to discover the (yet undecoded) mix /
-    // Main-LR meter packets when connected to a real console.
-    conn.on("meterPacketInfo", (p: { id: number; len: number; decoded: boolean }) => {
-      const idStr = p.id < 0 ? "—" : `0x${p.id.toString(16).padStart(2, "0")}`;
-      this.send("sq:log", {
-        level: "frame",
-        msg: `Meter packet: id=${idStr} body=${p.len}B${p.decoded ? "" : " (undecoded)"}`,
-      });
-    });
+    // on the UDP meter port, plus for undecoded bodies a dB snapshot and the
+    // changed-slot map, refreshed every few seconds. Exists to discover the
+    // (yet undecoded) mix / Main-LR meter packets when connected to a real
+    // console: feed signal into one known bus at a time and watch which
+    // packet id / slot index starts moving.
+    conn.on(
+      "meterPacketInfo",
+      (p: {
+        id: number;
+        len: number;
+        decoded: boolean;
+        sample?: string;
+        changes?: string;
+        hot?: string;
+        raw?: Buffer;
+      }) => {
+        const idStr = p.id < 0 ? "—" : `0x${p.id.toString(16).padStart(2, "0")}`;
+        // Quiet mode: undecoded shapes log on first sight and when slots
+        // actually moved — steady-state snapshots are log noise.
+        if (!p.decoded && !p.changes && !p.raw) return;
+        const sample = p.decoded ? "" : ` dB: ${p.sample ?? "-"}`;
+        const changes = p.changes ? ` chg: ${p.changes}` : "";
+        const hot = p.hot ? ` hot: ${p.hot}` : "";
+        this.send("sq:log", {
+          level: "frame",
+          msg: `Meter packet: id=${idStr} body=${p.len}B${p.decoded ? "" : " (undecoded)"}${sample}${hot}${changes}`,
+        });
+        // First sight of an undecoded shape — keep one raw datagram next to
+        // the other diagnostics so the packet layout can be analyzed offline.
+        if (p.raw) this.dumpMeterPacket(p.id, p.raw);
+      }
+    );
 
     conn.on("error", (err: Error) => {
       this.send("sq:log", { level: "error", msg: `Connection error: ${err.message}` });
     });
+  }
+
+  /**
+   * Save one raw undecoded meter datagram under userData/diagnostics —
+   * one file per packet shape (id + body length), for offline layout analysis.
+   */
+  private dumpMeterPacket(id: number, raw: Buffer): void {
+    try {
+      const dir = path.join(app.getPath("userData"), "diagnostics");
+      fs.mkdirSync(dir, { recursive: true });
+      const binPath = path.join(dir, `meter-packet-0x${id.toString(16)}-${raw.length}B.bin`);
+      fs.writeFileSync(binPath, raw);
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Diagnostics: meter packet saved: ${binPath}`,
+      });
+    } catch (e) {
+      this.send("sq:log", {
+        level: "warn",
+        msg: `Diagnostics: failed to write meter packet: ${(e as Error).message}`,
+      });
+    }
   }
 
   /**

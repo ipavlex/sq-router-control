@@ -107,12 +107,11 @@ export interface MetersPayload {
   inputs: (number | null)[];
   /** true when a channel's peak is at or above 0 dBFS (clip). */
   clip: boolean[];
-  /** dBFS levels for mix buses 1-12 (null = no signal). Demo mode only —
-   *  the live UDP format for mix meters is not decoded yet. */
+  /** dBFS levels for mix buses 1-12 (null = no signal). */
   mixes?: (number | null)[];
   /** Clip flags for mix buses 1-12. */
   mixClip?: boolean[];
-  /** Main LR level (dBFS, null = no signal). Demo mode only for now. */
+  /** Main LR level (dBFS, null = no signal). */
   mainLR?: number | null;
   /** Main LR clip flag. */
   mainLRClip?: boolean;

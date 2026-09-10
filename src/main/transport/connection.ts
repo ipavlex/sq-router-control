@@ -37,10 +37,22 @@ import {
 import { BufferReader } from "./buffer";
 import { modelName } from "../models";
 import { decodeStereoPairs } from "../stereo-links";
-import { decodeMeterMessage, resetMeters, MetersPayload } from "../meters";
+import {
+  decodeMeterMessage,
+  resetMeters,
+  meterSamplePreview,
+  meterBody,
+  diffMeterBody,
+  formatMeterChanges,
+  hotMeterSlots,
+  MetersPayload,
+} from "../meters";
 
 export const SQ_TCP_PORT = 51326;
 export const KEEPALIVE_INTERVAL_MS = 1000;
+
+/** ms between repeat dB-snapshots of the same undecoded meter packet shape. */
+const METER_SAMPLE_INTERVAL_MS = 4000;
 
 export interface ConnectOptions {
   host: string;
@@ -101,6 +113,12 @@ export class Connection extends EventEmitter {
 
   /** Distinct meter-packet shapes seen (id:bodyLen) — protocol discovery. */
   private _meterCombos = new Set<string>();
+  /** Last dB-snapshot time per undecoded packet shape (id:bodyLen). */
+  private _meterSampleAt = new Map<string, number>();
+  /** Previous raw body per undecoded packet shape — change detection. */
+  private _meterPrev = new Map<string, number[]>();
+  /** Undecoded shapes whose raw datagram was already handed off for saving. */
+  private _meterRawSaved = new Set<string>();
 
   constructor(opts: ConnectOptions) {
     super();
@@ -156,6 +174,9 @@ export class Connection extends EventEmitter {
     this._initialStateParsed = false;
     this._frameCounters = { total: 0, dsp: 0, paramData: 0, routingBlock: 0, fullState: 0, channelInfo: 0 };
     this._meterCombos.clear();
+    this._meterSampleAt.clear();
+    this._meterPrev.clear();
+    this._meterRawSaved.clear();
 
     const timeout = setTimeout(() => {
       tcp.destroy();
@@ -287,10 +308,12 @@ export class Connection extends EventEmitter {
 
   /**
    * Protocol-discovery helper: report the shape of every distinct meter
-   * packet once (id + body length + whether it was decoded). Mix / Main-LR
-   * levels are expected to live in packets we don't decode yet — this
-   * inventory makes them visible in the app log on a real console, so the
-   * format can be reverse-engineered from the logged id/length pairs.
+   * packet once (id + body length + whether it was decoded), and for
+   * undecoded shapes re-emit, every few seconds, a dB snapshot of the body
+   * plus the list of slots that changed since the previous sample. Mix /
+   * Main-LR levels are expected to live in packets we don't decode yet —
+   * feed signal into one known bus at a time and the moving slot indices
+   * identify the packet and offsets that carry them.
    */
   private _noteMeterPacket(msg: Buffer, decoded: boolean): void {
     let key: string;
@@ -306,9 +329,42 @@ export class Connection extends EventEmitter {
       len = msg.length;
       key = `raw:${len}`;
     }
-    if (this._meterCombos.has(key)) return;
+    const first = !this._meterCombos.has(key);
+    const now = Date.now();
+    // Decoded shapes log once; undecoded shapes re-sample on an interval so
+    // their dB snapshot and change map track the signal (slot hunting on a
+    // real console).
+    if (
+      !first &&
+      (decoded || now - (this._meterSampleAt.get(key) ?? 0) < METER_SAMPLE_INTERVAL_MS)
+    ) {
+      return;
+    }
     this._meterCombos.add(key);
-    this.emit("meterPacketInfo", { id, len, decoded });
+    this._meterSampleAt.set(key, now);
+
+    const body = meterBody(msg);
+    const prev = this._meterPrev.get(key) ?? null;
+    const diff = body ? diffMeterBody(body, prev) : null;
+    if (diff) this._meterPrev.set(key, diff.raws);
+
+    const hot = !decoded && body ? hotMeterSlots(body) : null;
+    this.emit("meterPacketInfo", {
+      id,
+      len,
+      decoded,
+      sample: decoded ? undefined : meterSamplePreview(msg) ?? undefined,
+      // Change map only makes sense once a baseline exists (not first sight).
+      changes:
+        !decoded && diff && prev !== null && diff.changed.length > 0
+          ? formatMeterChanges(diff.changed)
+          : undefined,
+      hot: hot && hot.length > 0 ? formatMeterChanges(hot) : undefined,
+      // Full datagram on first sight of an undecoded shape — the controller
+      // saves it next to the other diagnostics for offline analysis.
+      raw: !decoded && first && !this._meterRawSaved.has(key) ? msg : undefined,
+    });
+    if (!decoded) this._meterRawSaved.add(key);
   }
 
   /** Send a raw frame to the mixer. */
