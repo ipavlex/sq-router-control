@@ -64,11 +64,10 @@ function populateMonitorSelects(): void {
   const opts = buildOutputOptions();
   for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
     sel.innerHTML = "";
-    // Placeholder
+    // Placeholder stays selectable — picking it deselects the output.
     const ph = document.createElement("option");
     ph.value = "";
     ph.textContent = "— не выбран —";
-    ph.disabled = true;
     sel.appendChild(ph);
     // Group by type
     const groups: Record<string, HTMLOptGroupElement> = {};
@@ -100,13 +99,13 @@ function populateMonitorSelects(): void {
 // ── source lock (until both outputs are chosen) ─────────────────────
 
 /**
- * Keep the source buttons (mixes, channels, FX returns, Main LR) disabled
- * until both L and R output selectors have a value — there is nothing to
- * route into otherwise. The "Применять" checkbox stays available: enabling
- * it before the outputs are chosen is what captures the routing snapshot.
+ * Keep the "Применять" toggle and the source buttons (mixes, channels, FX
+ * returns, Main LR) disabled until at least one of the L/R output selectors
+ * has a value — there is nothing to apply or route into otherwise.
  */
 function updateSourceLock(): void {
-  const locked = !elementRefs.monLDest.value || !elementRefs.monRDest.value;
+  const locked = !elementRefs.monLDest.value && !elementRefs.monRDest.value;
+  elementRefs.monEnable.disabled = locked;
   elementRefs.mainlrBtn.disabled = locked;
   for (const group of [elementRefs.mixButtons, elementRefs.chButtons, elementRefs.fxButtons]) {
     for (const b of group.querySelectorAll<HTMLButtonElement>("button")) {
@@ -151,6 +150,8 @@ function recordBorrowedOutputs(): void {
  * neighbours (e.g. past the end of a bank).
  */
 function alignRToLNeighbor(): void {
+  // L deselected — there is no neighbour to align to.
+  if (!elementRefs.monLDest.value) return;
   const [destTypeHex, chStr] = elementRefs.monLDest.value.split(":");
   const neighborVal = `${destTypeHex}:${Number(chStr) + 1}`;
   if (elementRefs.monRDest.value === neighborVal) return;
