@@ -598,7 +598,7 @@ async function onChannelClick(
   await routeActiveSelection();
 }
 
-function buildMixButtons(): void {
+export function buildMixButtons(): void {
   const container = elementRefs.mixButtons;
   container.innerHTML = "";
   const items: MixItem[] = [];
@@ -607,14 +607,22 @@ function buildMixButtons(): void {
   for (const item of items) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "mix-btn";
+    const mixIdx = item.b3 - 0x58;
+    const stereo = isMixStereo(mixIdx);
+    btn.className = stereo ? "mix-btn mix-stereo" : "mix-btn";
     btn.textContent = item.label;
     btn.dataset.b3 = String(item.b3);
-    // Vertical level meter at the left edge (mix levels: demo mode only).
+    // Vertical level meters at the left edge: two bars (L | R) on a
+    // stereo mix, one on a mono mix.
     btn.appendChild(buildChMeter());
+    if (stereo) btn.appendChild(buildChMeter());
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
     container.appendChild(btn);
   }
+
+  // Re-apply the latest readings so a rebuild (a mix turned out stereo)
+  // doesn't blank the bars until the next meter packet.
+  if (lastMeters) applyMeters(lastMeters);
   updateSourceLock();
 }
 
@@ -695,6 +703,40 @@ let meterFrame: number | null = null;
 let lastMeters: MetersPayload | null = null;
 
 /**
+ * Mixes observed carrying distinct L/R levels (mixesL ≠ mixesR beyond a
+ * small threshold). Mono buses meter L and R bit-identically, so a real
+ * divergence means the bus is a stereo mix. Latched for the session — a
+ * stereo mix fed mono content (L == R) keeps its two bars.
+ */
+const stereoObservedMixes = new Set<number>();
+/** dB difference between sides treated as a real L/R divergence. */
+const STEREO_DIVERGENCE_DB = 0.4;
+
+/**
+ * Latch stereo-observed mixes from the latest payload.
+ * Returns true when the set changed (mix buttons need a rebuild).
+ */
+function updateStereoObservedMixes(m: MetersPayload | null): boolean {
+  if (!m?.mixesL || !m?.mixesR) return false;
+  let changed = false;
+  for (let i = 0; i < 12; i++) {
+    if (stereoObservedMixes.has(i)) continue;
+    const l = m.mixesL[i];
+    const r = m.mixesR[i];
+    if (l != null && r != null && Math.abs(l - r) >= STEREO_DIVERGENCE_DB) {
+      stereoObservedMixes.add(i);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** A mix shows the stereo L/R meter: reported pair or divergence observed. */
+function isMixStereo(mixIdx: number): boolean {
+  return getMixPair(mixIdx) !== null || stereoObservedMixes.has(mixIdx);
+}
+
+/**
  * Apply a meters payload to the channel buttons, coalescing the incoming
  * stream per animation frame (same pattern as the routing tab).
  */
@@ -705,6 +747,11 @@ export function updateMeters(p: MetersPayload | null): void {
     meterFrame = null;
     const m = pendingMeters;
     pendingMeters = null;
+    if (updateStereoObservedMixes(m)) {
+      // A mix just turned out to be stereo — rebuild its button with two
+      // bars (the rebuild re-applies the latest readings itself).
+      buildMixButtons();
+    }
     applyMeters(m);
   });
 }
@@ -727,24 +774,36 @@ function applyMeters(m: MetersPayload | null): void {
       applyChMeter(meters[1] ?? null, m ? m.inputs[b3r] ?? null : null, m ? !!m.clip[b3r] : false);
     }
   }
-  // Mix buses 1–12 (live from UDP packet 0x18).
+  // Mix buses 1–12 (live from UDP packet 0x18). A stereo mix shows two
+  // bars (L | R); a mono mix keeps a single bar. Stereo is either reported
+  // in the snapshot (mixStereoPairs) or latched from observed L/R
+  // divergence; for a reported pair the sides combine across both buses.
   for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")) {
-    const meter = btn.querySelector<HTMLElement>(".ch-meter");
-    if (!meter) continue;
-    const idx = Number(btn.dataset.b3) - 0x58;
-    applyChMeter(
-      meter,
-      m && m.mixes ? m.mixes[idx] ?? null : null,
-      m && m.mixClip ? !!m.mixClip[idx] : false
-    );
+    const meters = btn.querySelectorAll<HTMLElement>(".ch-meter");
+    if (!meters.length) continue;
+    const mixIdx = Number(btn.dataset.b3) - 0x58;
+    if (isMixStereo(mixIdx) && meters.length >= 2) {
+      const pair = getMixPair(mixIdx);
+      const p0 = pair ? pair[0] : mixIdx;
+      const p1 = pair ? pair[1] : mixIdx;
+      applyChMeter(
+        meters[0],
+        louderDb(m?.mixesL?.[p0], m?.mixesL?.[p1]),
+        !!(m?.mixClipL?.[p0] || m?.mixClipL?.[p1])
+      );
+      applyChMeter(
+        meters[1],
+        louderDb(m?.mixesR?.[p0], m?.mixesR?.[p1]),
+        !!(m?.mixClipR?.[p0] || m?.mixClipR?.[p1])
+      );
+    } else {
+      applyChMeter(meters[0], m?.mixes?.[mixIdx] ?? null, !!m?.mixClip?.[mixIdx]);
+    }
   }
-  // Main LR button is static HTML in .monitor-setup — it is not inside
-  // #mix-buttons, so the loop above never reaches it.
-  applyChMeter(
-    elementRefs.mainlrBtn.querySelector<HTMLElement>(".ch-meter"),
-    m ? m.mainLR ?? null : null,
-    m ? !!m.mainLRClip : false
-  );
+  // Main LR button (static HTML in .monitor-setup): always a stereo meter.
+  const lrMeters = elementRefs.mainlrBtn.querySelectorAll<HTMLElement>(".ch-meter");
+  applyChMeter(lrMeters[0] ?? null, m?.mainLRL ?? m?.mainLR ?? null, !!(m?.mainLRClipL ?? m?.mainLRClip));
+  applyChMeter(lrMeters[1] ?? null, m?.mainLRR ?? m?.mainLR ?? null, !!(m?.mainLRClipR ?? m?.mainLRClip));
 }
 
 /** Apply one channel's reading to a single vertical meter. */
@@ -761,6 +820,18 @@ function applyChMeter(
   fill.style.height = `${dbToPercent(db)}%`;
   fill.className = `ch-meter-fill${meterClassName(db)}`;
   clip.classList.toggle("on", isClip);
+}
+
+/** Check if a mix (0-based) belongs to a stereo-linked pair; returns the pair. */
+function getMixPair(mixIdx: number): number[] | null {
+  return state.mixStereoPairs.find(([a, b]) => a === mixIdx || b === mixIdx) ?? null;
+}
+
+/** Louder of two optional dB readings (null-aware). */
+function louderDb(a: number | null | undefined, b: number | null | undefined): number | null {
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return Math.max(a, b);
 }
 
 /** Check if a b3 is the left side of a stereo pair. Returns the pair or null. */
@@ -902,8 +973,10 @@ export function reset(): void {
   updateLockBtnDot();
   elementRefs.monEnable.checked = false; // fresh session — start unchecked
   populateMonitorSelects();
-  buildMixButtons();
   state.stereoPairs = [];
+  state.mixStereoPairs = [];
+  stereoObservedMixes.clear();
+  buildMixButtons(); // rebuild without stereo bars
   lastMeters = null; // fresh session — don't re-apply stale readings
   buildChannelButtons();
   buildFxButtons();
@@ -917,8 +990,11 @@ export function reset(): void {
 
 // ── bindings ─────────────────────────────────────────────────────────
 
-// The Main LR button is static HTML — attach its level meter once.
+// The Main LR button is static HTML — attach its stereo level meter once
+// (always two bars: Main LR is a stereo bus).
 elementRefs.mainlrBtn.dataset.b3 = String(0x68);
+elementRefs.mainlrBtn.classList.add("mix-stereo");
+elementRefs.mainlrBtn.appendChild(buildChMeter());
 elementRefs.mainlrBtn.appendChild(buildChMeter());
 
 elementRefs.monLDest.addEventListener("change", async () => {

@@ -25,6 +25,8 @@ let mainWindow: BrowserWindow | null = null;
 interface DemoVariant {
   names: Record<number, string>;
   stereoPairs: number[][];
+  /** Stereo-linked mix pairs as 0-based mix indexes (Mix 1 = 0). */
+  mixStereoPairs: number[][];
   inputs: { destB3: number; source: number; sourceChannel: number }[];
   outputs: (
     | { kind: "output"; sourceB3: number; dest: number; destChannel0: number }
@@ -53,6 +55,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       [2, 3], [6, 7], [8, 9], [14, 15], [16, 17],
       [28, 29], [30, 31], [32, 33], [36, 37],
     ],
+    mixStereoPairs: [[0, 1], [8, 9]],
     inputs: [
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: i, source: Src.Local, sourceChannel: i })),
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: 16 + i, source: Src.SLink, sourceChannel: i })),
@@ -90,6 +93,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
     stereoPairs: [
       [0, 1], [6, 7], [16, 17], [28, 29], [30, 31], [32, 33], [36, 37],
     ],
+    mixStereoPairs: [[2, 3], [6, 7]],
     inputs: [
       ...Array.from({ length: 8 }, (_, i) => ({ destB3: i, source: Src.Local, sourceChannel: i })),
       ...Array.from({ length: 8 }, (_, i) => ({ destB3: 8 + i, source: Src.SLink, sourceChannel: i })),
@@ -128,6 +132,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
     stereoPairs: [
       [2, 3], [16, 17], [28, 29], [30, 31], [32, 33],
     ],
+    mixStereoPairs: [[10, 11]],
     inputs: [
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: i, source: Src.SLink, sourceChannel: i })),
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: 16 + i, source: Src.Local, sourceChannel: i })),
@@ -772,6 +777,7 @@ class SQController {
           [2, 3], [6, 7], [8, 9], [14, 15], [16, 17],
           [28, 29], [30, 31], [32, 33], [36, 37],
         ];
+        this.model.mixStereoPairs = [[0, 1], [8, 9]];
       },
       // Phase 4 — output patches.
       () => {
@@ -902,7 +908,7 @@ class SQController {
       if (!this.demoMode || !this.demoMeters) return;
       try {
         const snap = this.model.snapshot();
-        this.demoMeters.sync(snap.inputs, snap.stereoPairs);
+        this.demoMeters.sync(snap.inputs, snap.stereoPairs, snap.mixStereoPairs);
         this.send("sq:meters", this.demoMeters.tick());
       } catch (err) {
         // Never let the meter simulation crash the main process.
@@ -946,6 +952,7 @@ class SQController {
 
     // Stereo pairs.
     this.model.stereoPairs = config.stereoPairs;
+    this.model.mixStereoPairs = config.mixStereoPairs;
 
     // Input patches.
     for (const p of config.inputs) {

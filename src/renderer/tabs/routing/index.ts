@@ -5,7 +5,7 @@
  */
 import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../core/utils";
 import { METER_MIN_DB, dbToPercent, meterClassName, meterDbText } from "../../core/meters";
-import { buildChannelButtons } from "../monitor";
+import { buildChannelButtons, buildMixButtons } from "../monitor";
 import type { SnapshotInput, SnapshotPayload, MetersPayload } from "../../../shared/ipc";
 import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";
 

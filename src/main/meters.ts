@@ -18,21 +18,12 @@
  * means the channel is clipping. 0x0000 / ≥ 0xF000 are data placeholders.
  */
 
-export interface MetersPayload {
-  /** dBFS levels for input channels 0..47 (null when the channel has no data / is at the floor). */
-  inputs: (number | null)[];
-  /** true when the channel's peak is at or above 0 dBFS (clip). */
-  clip: boolean[];
-  /** dBFS levels for mix buses 1-12 (null = no signal), decoded live from
-   *  the id=0x18 UDP packet; the demo simulator fills the same fields. */
-  mixes?: (number | null)[];
-  /** Clip flags for mix buses 1-12. */
-  mixClip?: boolean[];
-  /** Main LR level (dBFS, null = no signal). */
-  mainLR?: number | null;
-  /** Main LR clip flag. */
-  mainLRClip?: boolean;
-}
+/**
+ * The meters payload shared with the renderer over IPC. Defined once in
+ * shared/ipc.ts; re-exported here for the main-process modules.
+ */
+import type { MetersPayload } from "../shared/ipc";
+export type { MetersPayload };
 
 const INPUT_CHANNELS = 48;
 /** Per-channel slot count in the id=0x06 detailed meter packet. */
@@ -53,13 +44,18 @@ const DATA_RAW = 0xf000;
  *   bus 24-35 Mix 1-12 (bus 23 + mix number)
  *   bus 36-39 FX send 1-4
  *
- * Level slots within a bus block: +0, +1 and +4, +5 (two L/R tap pairs,
- * values are close); +2 holds 0x0000 and +3 holds 0xFFFF when idle. Same
- * dBFS encoding as the input packets: (raw - 0x8000) / 256, floor 0x1201.
+ * Slots within a bus block: two L/R meter taps — [s0, s1] and [s3, s4]
+ * (slot 2 holds 0x0000, slot 5 a ≥0xF000 placeholder). The taps differ
+ * slightly (e.g. LR music: −4.8/−7.8 and −6.5/−7.8); per side the louder
+ * tap wins. Same dBFS encoding as the input packets:
+ * (raw - 0x8000) / 256, floor 0x1201, clip > 0x8000.
  */
 const BUS_STRIDE = 6;
-/** Byte offsets (within a 12-byte bus block) of the four level slots. */
-const BUS_LEVEL_OFFSETS = [0, 2, 8, 10];
+/** Byte offsets of the (L, R) tap pairs within a 12-byte bus block. */
+const BUS_LR_OFFSETS: [number, number][] = [
+  [0, 2], // slots s0/s1
+  [6, 8], // slots s3/s4
+];
 const BUS_MAIN_LR = 23;
 const BUS_MIX_FIRST = 24;
 const MIX_BUS_COUNT = 12;
@@ -201,28 +197,49 @@ let single: MetersPayload = emptyMeters();
 let busMeters: {
   mixes: (number | null)[];
   mixClip: boolean[];
+  /** Per-side levels (L/R), for stereo mix buttons and the Main LR button. */
+  mixesL: (number | null)[];
+  mixesR: (number | null)[];
+  mixClipL: boolean[];
+  mixClipR: boolean[];
   mainLR: number | null;
   mainLRClip: boolean;
+  mainLRL: number | null;
+  mainLRR: number | null;
+  mainLRClipL: boolean;
+  mainLRClipR: boolean;
 } | null = null;
 
+interface BusStereo {
+  l: number | null;
+  r: number | null;
+  clipL: boolean;
+  clipR: boolean;
+}
+
 /**
- * Decode one 6-slot bus block of the id=0x18 packet: the loudest of the four
- * level slots (+0, +1, +4, +5) as dBFS (null = floor), and a clip flag when
- * any of them went over 0 dBFS. Data placeholders (0x0000 / ≥ 0xF000) are
- * ignored.
+ * Decode one 6-slot bus block of the id=0x18 packet: per-side dBFS levels
+ * (louder of the two L/R taps per side, null = floor) and per-side clip
+ * flags (>0 dBFS). Data placeholders (0x0000 / ≥ 0xF000) are ignored.
  */
-function decodeBusLevel(body: Buffer, bus: number): { db: number | null; clip: boolean } {
+function decodeBusStereo(body: Buffer, bus: number): BusStereo {
   const base = bus * BUS_STRIDE * 2;
-  let db: number | null = null;
-  let clip = false;
-  for (const off of BUS_LEVEL_OFFSETS) {
-    const raw = body.readUInt16LE(base + off);
-    if (raw === 0 || raw >= DATA_RAW) continue;
-    const d = rawToDb(raw);
-    if (d != null && (db == null || d > db)) db = d;
-    if (raw > CLIP_RAW) clip = true;
+  const out: BusStereo = { l: null, r: null, clipL: false, clipR: false };
+  for (const [lOff, rOff] of BUS_LR_OFFSETS) {
+    const rawL = body.readUInt16LE(base + lOff);
+    if (rawL !== 0 && rawL < DATA_RAW) {
+      const d = rawToDb(rawL);
+      if (d != null && (out.l == null || d > out.l)) out.l = d;
+      if (rawL > CLIP_RAW) out.clipL = true;
+    }
+    const rawR = body.readUInt16LE(base + rOff);
+    if (rawR !== 0 && rawR < DATA_RAW) {
+      const d = rawToDb(rawR);
+      if (d != null && (out.r == null || d > out.r)) out.r = d;
+      if (rawR > CLIP_RAW) out.clipR = true;
+    }
   }
-  return { db, clip };
+  return out;
 }
 
 /**
@@ -270,13 +287,34 @@ export function decodeMeterMessage(msg: Buffer): MetersPayload | null {
   if (id === 0x18 && body.length >= (BUS_MIX_FIRST + MIX_BUS_COUNT) * BUS_STRIDE * 2) {
     const mixes: (number | null)[] = [];
     const mixClip: boolean[] = [];
+    const mixesL: (number | null)[] = [];
+    const mixesR: (number | null)[] = [];
+    const mixClipL: boolean[] = [];
+    const mixClipR: boolean[] = [];
     for (let k = 0; k < MIX_BUS_COUNT; k++) {
-      const r = decodeBusLevel(body, BUS_MIX_FIRST + k);
-      mixes.push(r.db);
-      mixClip.push(r.clip);
+      const s = decodeBusStereo(body, BUS_MIX_FIRST + k);
+      mixes.push(s.l == null ? s.r : s.r == null ? s.l : Math.max(s.l, s.r));
+      mixClip.push(s.clipL || s.clipR);
+      mixesL.push(s.l);
+      mixesR.push(s.r);
+      mixClipL.push(s.clipL);
+      mixClipR.push(s.clipR);
     }
-    const lr = decodeBusLevel(body, BUS_MAIN_LR);
-    busMeters = { mixes, mixClip, mainLR: lr.db, mainLRClip: lr.clip };
+    const lr = decodeBusStereo(body, BUS_MAIN_LR);
+    busMeters = {
+      mixes,
+      mixClip,
+      mixesL,
+      mixesR,
+      mixClipL,
+      mixClipR,
+      mainLR: lr.l == null ? lr.r : lr.r == null ? lr.l : Math.max(lr.l, lr.r),
+      mainLRClip: lr.clipL || lr.clipR,
+      mainLRL: lr.l,
+      mainLRR: lr.r,
+      mainLRClipL: lr.clipL,
+      mainLRClipR: lr.clipR,
+    };
     return mergeMeters();
   }
 
@@ -293,8 +331,16 @@ function mergeMeters(): MetersPayload {
   if (busMeters) {
     merged.mixes = busMeters.mixes;
     merged.mixClip = busMeters.mixClip;
+    merged.mixesL = busMeters.mixesL;
+    merged.mixesR = busMeters.mixesR;
+    merged.mixClipL = busMeters.mixClipL;
+    merged.mixClipR = busMeters.mixClipR;
     merged.mainLR = busMeters.mainLR;
     merged.mainLRClip = busMeters.mainLRClip;
+    merged.mainLRL = busMeters.mainLRL;
+    merged.mainLRR = busMeters.mainLRR;
+    merged.mainLRClipL = busMeters.mainLRClipL;
+    merged.mainLRClipR = busMeters.mainLRClipR;
   }
   return merged;
 }

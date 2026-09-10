@@ -80,6 +80,7 @@ export const elementRefs: ElementRefs = {
 export const state: RendererState = {
   modelSpec: null,
   stereoPairs: [],
+  mixStereoPairs: [],
   activeInputs: [],
   channelStates: new Map(),
   currentSceneName: null,

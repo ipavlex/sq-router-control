@@ -89,6 +89,15 @@ export function pairEncoding(
 /**
  * Decode all stereo-linked input-channel pairs: [[leftB3, rightB3], ...]
  * in ascending order.
+ *
+ * CAUTION — known trap: the table continues past the input entries (FX
+ * returns, masters, …), and encoding-B slot ids there can numerically
+ * coincide with b3 addresses. On the reference SQ-5 dump, entries 44–55
+ * hold targets 0x58–0x63 — which look exactly like mix-b3 self-targets
+ * (mixes live at b3 0x58–0x63) but are in fact the pair-slot ids of
+ * Ch45-48 and later entries. Confirmed real pairs: [44,45] and [46,47].
+ * The input scan therefore covers the full 48 input entries and nothing
+ * beyond is interpreted as channel pairs.
  */
 export function decodeStereoPairs(payload: Buffer): number[][] {
   const pairs: number[][] = [];

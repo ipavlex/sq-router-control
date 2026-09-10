@@ -128,6 +128,8 @@ export interface RoutingSnapshot {
   outputs: OutputPatch[];
   /** Stereo-linked channel pairs: each entry is [leftB3, rightB3]. */
   stereoPairs: number[][];
+  /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
+  mixStereoPairs: number[][];
   /** number of routing update frames received. */
   updates: number;
   /** last routing/config block (sub=0x10) byte length, if any. */
@@ -155,6 +157,9 @@ export class RoutingModel {
       (p) => p.length === 2 && p[0] % 2 === 0 && p[1] === p[0] + 1
     );
   }
+
+  /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
+  mixStereoPairs: number[][] = [];
 
   /**
    * Try to decode a DSP frame as a patch frame. Returns true if it was a
@@ -267,6 +272,7 @@ export class RoutingModel {
       ),
       outputs: [...this.outputPatches],
       stereoPairs: [...this.stereoPairs],
+      mixStereoPairs: this.mixStereoPairs.map((p) => [...p]),
       updates: this.updates,
       routingBlockBytes: this.routingBlockBytes,
     };
@@ -279,5 +285,6 @@ export class RoutingModel {
     this.routingBlockBytes = null;
     this.names.clear();
     this.stereoPairs = [];
+    this.mixStereoPairs = [];
   }
 }

@@ -87,6 +87,8 @@ export interface SnapshotPayload {
   inputs: SnapshotInput[];
   outputs: SnapshotOutput[];
   stereoPairs: number[][];
+  /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
+  mixStereoPairs?: number[][];
   updates: number;
   routingBlockBytes: number | null;
   /** Name of the console's currently-active scene, if known. */
@@ -107,14 +109,24 @@ export interface MetersPayload {
   inputs: (number | null)[];
   /** true when a channel's peak is at or above 0 dBFS (clip). */
   clip: boolean[];
-  /** dBFS levels for mix buses 1-12 (null = no signal). */
+  /** dBFS levels for mix buses 1-12, louder side of each bus (null = no signal). */
   mixes?: (number | null)[];
   /** Clip flags for mix buses 1-12. */
   mixClip?: boolean[];
-  /** Main LR level (dBFS, null = no signal). */
+  /** Per-side mix bus levels (L/R) for stereo display; mix i = index i. */
+  mixesL?: (number | null)[];
+  mixesR?: (number | null)[];
+  mixClipL?: boolean[];
+  mixClipR?: boolean[];
+  /** Main LR level, louder side (dBFS, null = no signal). */
   mainLR?: number | null;
   /** Main LR clip flag. */
   mainLRClip?: boolean;
+  /** Per-side Main LR levels (L/R). */
+  mainLRL?: number | null;
+  mainLRR?: number | null;
+  mainLRClipL?: boolean;
+  mainLRClipR?: boolean;
 }
 
 export type LogLevel = "dsp" | "frame" | "ok" | "warn" | "error";

@@ -85,6 +85,8 @@ export interface RendererState {
   modelSpec: ModelSpec | null;
   /** Stereo pairs from snapshot: [[leftB3, rightB3], ...] */
   stereoPairs: number[][];
+  /** Stereo-linked mix pairs from snapshot: 0-based mix indexes [[10, 11]] = Mix 11-12. */
+  mixStereoPairs: number[][];
   /** Last routing snapshot received from the console (Active Patching data). */
   activeInputs: SnapshotInput[];
   /** Channel state (fader/mute/gain/…) from snapshots, keyed by b3. */

@@ -360,11 +360,13 @@ export class Connection extends EventEmitter {
           ? formatMeterChanges(diff.changed)
           : undefined,
       hot: hot && hot.length > 0 ? formatMeterChanges(hot) : undefined,
-      // Full datagram on first sight of an undecoded shape — the controller
-      // saves it next to the other diagnostics for offline analysis.
-      raw: !decoded && first && !this._meterRawSaved.has(key) ? msg : undefined,
+      // Full datagram on first sight of a shape (decoded or not) — the
+      // controller saves it next to the other diagnostics for offline
+      // analysis. Fresh sessions overwrite the file, so each reconnect
+      // snapshots the console's current meter state.
+      raw: first && !this._meterRawSaved.has(key) ? msg : undefined,
     });
-    if (!decoded) this._meterRawSaved.add(key);
+    if (first) this._meterRawSaved.add(key);
   }
 
   /** Send a raw frame to the mixer. */
@@ -622,7 +624,8 @@ export class Connection extends EventEmitter {
     // ── Stereo-link table ──────────────────────────────────────────────
     // Fixed offset in the ParamData blob, decoded via stereo-links.ts.
     // Two link encodings (classic right-side-backlink and slot-pair) — see
-    // the module docs. Validated against a real SQ-5 dump: 9/9 pairs.
+    // the module docs. Validated against a real SQ-5 dump: 9/9 pairs
+    // (Ch45-48 pairs included — see the module-doc trap note).
     const pairs = decodeStereoPairs(payload);
     // Always emit: an empty list is meaningful (console has no linked pairs)
     // and must clear any stale model state.

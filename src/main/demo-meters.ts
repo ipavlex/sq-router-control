@@ -67,6 +67,8 @@ interface MixState {
   level: number | null;
   /** Ticks remaining to keep the clip flag lit after a clip. */
   clipHold: number;
+  /** Stereo-linked mix — L and R bars diverge slightly. */
+  stereo: boolean;
 }
 
 function rand(min: number, max: number): number {
@@ -115,6 +117,8 @@ export class DemoMetersSim {
   private pairs: number[][] = [];
   /** Mix bus states (index 0 = Mix 1). */
   private mixes: MixState[] = [];
+  /** Stereo-linked mix pairs (0-based mix indexes). */
+  private mixPairs: number[][] = [];
   /** Main LR state. */
   private mainLR: MixState | null = null;
   /** Signature of the last seen active-channel set. */
@@ -126,7 +130,11 @@ export class DemoMetersSim {
    * fresh state (and ramp in), long-lived channels keep drifting untouched.
    * Mix contributors are re-picked only when the routed set actually changes.
    */
-  sync(inputs: { destB3: number; name: string }[], stereoPairs: number[][]): void {
+  sync(
+    inputs: { destB3: number; name: string }[],
+    stereoPairs: number[][],
+    mixStereoPairs: number[][] = []
+  ): void {
     const active = new Set(inputs.map((i) => i.destB3));
     for (const ch of this.channels.keys()) {
       if (!active.has(ch)) this.channels.delete(ch);
@@ -137,6 +145,7 @@ export class DemoMetersSim {
       }
     }
     this.pairs = (stereoPairs || []).filter(([l, r]) => active.has(l) && active.has(r));
+    this.mixPairs = mixStereoPairs || [];
 
     // sync() runs on every tick, but the signature only changes when the
     // routing does — that's when mix contributors get re-assigned.
@@ -163,6 +172,7 @@ export class DemoMetersSim {
         trim: rand(-6, -1),
         level: null,
         clipHold: 0,
+        stereo: this.mixPairs.some(([a, b]) => a === i || b === i),
       });
     }
     // Main LR carries most of the show — more contributors, less headroom.
@@ -171,6 +181,7 @@ export class DemoMetersSim {
       trim: rand(-3, 0),
       level: null,
       clipHold: 0,
+      stereo: true,
     };
   }
 
@@ -202,14 +213,40 @@ export class DemoMetersSim {
     // Mix buses + Main LR, derived from the contributing input channels.
     const mixes: (number | null)[] = [];
     const mixClip: boolean[] = [];
+    const mixesL: (number | null)[] = [];
+    const mixesR: (number | null)[] = [];
+    const mixClipL: boolean[] = [];
+    const mixClipR: boolean[] = [];
     for (const mx of this.mixes) {
       const r = this.tickMix(mx);
       mixes.push(r.db);
       mixClip.push(r.clip);
+      // Stereo-linked mixes: the right side wanders a little around the
+      // left, like a real stereo bus. Mono mixes: identical sides.
+      const side = mx.stereo && r.db != null ? r.db + rand(-1.5, 1.5) : r.db;
+      mixesL.push(r.db);
+      mixesR.push(side);
+      mixClipL.push(r.clip);
+      mixClipR.push(r.clip);
     }
     const lr = this.mainLR ? this.tickMix(this.mainLR) : { db: null, clip: false };
 
-    return { inputs, clip, mixes, mixClip, mainLR: lr.db, mainLRClip: lr.clip };
+    return {
+      inputs,
+      clip,
+      mixes,
+      mixClip,
+      mixesL,
+      mixesR,
+      mixClipL,
+      mixClipR,
+      mainLR: lr.db,
+      mainLRClip: lr.clip,
+      mainLRL: lr.db,
+      mainLRR: lr.db == null ? null : lr.db + rand(-1.5, 1.5),
+      mainLRClipL: lr.clip,
+      mainLRClipR: lr.clip,
+    };
   }
 
   /** One simulation step for a mix bus; derived from its contributors. */

@@ -1359,7 +1359,8 @@ h2.stereo-diff:hover::after {
 }
 
 /* Second bar of a stereo pair sits next to the first (L | R). */
-.ch-btn .ch-meter + .ch-meter {
+.ch-btn .ch-meter + .ch-meter,
+.mix-btn .ch-meter + .ch-meter {
   left: 9px;
 }
 
