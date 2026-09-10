@@ -36,6 +36,7 @@ import {
 } from "./frame";
 import { BufferReader } from "./buffer";
 import { modelName } from "../models";
+import { decodeStereoPairs } from "../stereo-links";
 import { decodeMeterMessage, resetMeters, MetersPayload } from "../meters";
 
 export const SQ_TCP_PORT = 51326;
@@ -328,6 +329,14 @@ export class Connection extends EventEmitter {
     setTimeout(() => this.tcp && this.tcp.write(encodeSubExtra1()), 40);
     setTimeout(() => this.tcp && this.tcp.write(encodeSubExtra2()), 80);
     setTimeout(() => this.tcp && this.tcp.write(encodeSubExtra3()), 120);
+    // Same scene-list trigger as the handshake — keeps the scene library (and
+    // any scene tracking derived from it) fresh across manual refreshes.
+    setTimeout(
+      () =>
+        this.tcp &&
+        this.tcp.write(Buffer.from([0xf7, 0x02, 0x02, 0x20, 0xff, 0xff, 0xff, 0xff])),
+      160
+    );
   }
 
   disconnect(): void {
@@ -362,7 +371,7 @@ export class Connection extends EventEmitter {
       // versions — the original hard-coded 97376 check rejected other builds).
       if (!this._initialStateParsed && frame.payload.length >= 80000) {
         this._initialStateParsed = true;
-        this.emit("paramDataSize", frame.payload.length);
+        this.emit("paramDataSize", frame.payload.length, frame.payload);
         this._parseInitialState(frame.payload);
       }
     }
@@ -392,10 +401,13 @@ export class Connection extends EventEmitter {
   }
 
   private _parseChannelInfo(payload: Buffer): void {
-    // Scene-list format: header [02 02 xx 00 00 00 00], then 18-byte records.
+    // Scene-list format: header [02 02 xx 00 00 00 00], then 18-byte records:
+    // [flag][name up to 16 bytes null-padded][pad]. Known flags: 0x07 = stored
+    // scene, 0x00 = empty slot. No active-scene marker is documented.
     if (payload.length > 7 && payload[0] === 0x02 && payload[1] === 0x02) {
       const STRIDE = 18;
       const numRecords = Math.floor((payload.length - 7) / STRIDE);
+      const records: { id: number; flag: number; name: string | null }[] = [];
       for (let i = 0; i < numRecords; i++) {
         const off = 7 + i * STRIDE;
         const flag = payload[off];
@@ -403,7 +415,11 @@ export class Connection extends EventEmitter {
         const end = nameEnd >= 0 && nameEnd < off + 17 ? nameEnd : off + 17;
         const name = payload.slice(off + 1, end).toString("ascii").trimEnd();
         this.emit("sceneName", i, flag !== 0 ? name : null);
+        records.push({ id: i, flag, name: flag !== 0 ? name : null });
       }
+      // One summary event per dump — lets the app log the flag bytes seen in
+      // the wild (if the active scene ever marks itself, it shows up here).
+      this.emit("sceneList", records);
       return;
     }
     // Full-state records sent after recall/rename/store:
@@ -437,9 +453,25 @@ export class Connection extends EventEmitter {
 
   /**
    * Parse the 97376-byte ParamData blob. Only the offsets that are confirmed
-   * against firmware are decoded (channel names + channel-state events).
-   * Everything else is left to higher-level consumers via the 'dsp' events
-   * emitted here, which mirror the live-change frame format.
+   * against firmware (SQ5 FW 1.6) are decoded — see allen-heath-sq-tools
+   * sq-api for the full reverse-engineered offset map:
+   *
+   * 336-byte channel block at (884 + b3*336):
+   *   +0..15   name (16-byte null-padded ASCII)
+   *   +24/+26  input patch: source channel / source type (b3 ≤ 0x2f)
+   *   +84,85   HPF freq LE16          +87  HPF on/off byte
+   *   +121     gate on/off byte       +302 comp on/off byte
+   *   +304,305 delay duration LE16    +306 delay on/off byte
+   *   +324,325 trim LE16
+   *   +332     flags: bit0=polarity, bit1=mute
+   * Preamp gain: absolute offset 80028 + b3*336 (LE16; fits only for b3 ≤ 0x32).
+   * 300-byte fader/send section at (43520 + b3*300):
+   *   +0..67   bus 1-12 sends (stride 6)   +96,97 fader LE16   +98 pan byte
+   *   +114..133 FX 1-4 sends (stride 6)
+   *
+   * All values are re-emitted as synthetic 'dsp' events in the SAME format as
+   * live change frames, so a single consumer (MixerState.handleDsp) covers
+   * both the initial dump and subsequent live updates.
    */
   private _parseInitialState(payload: Buffer): void {
     const dsp = (
@@ -491,37 +523,54 @@ export class Connection extends EventEmitter {
           }
         }
 
+        // Input gain — separate preamp section later in the blob; guarded by
+        // length so it only fires for the channels that fit.
+        const gainOff = 80028 + b3 * 336;
+        if (gainOff + 2 <= payload.length) {
+          dsp(b3, 0x0c, 0x0c, 0x01, payload.readUInt16LE(gainOff)); // gain
+        }
+
+        // HPF (freq / on-off).
+        dsp(b3, 0x0e, 0x0d, 0x00, payload.readUInt16LE(blk + 84)); // freq
+        dsp(b3, 0x0e, 0x0c, 0x00, payload[blk + 87]); // on/off
+
+        // Gate / compressor / delay on-off.
+        dsp(b3, 0x0f, 0x0c, 0x00, payload[blk + 121]); // gate on/off
+        dsp(b3, 0x13, 0x0c, 0x00, payload[blk + 302]); // comp on/off
+        dsp(b3, 0x14, 0x0d, 0x00, payload.readUInt16LE(blk + 304)); // delay ms
+        dsp(b3, 0x14, 0x0c, 0x00, payload[blk + 306]); // delay on/off
+
+        // Trim.
+        dsp(b3, 0x0c, 0x0f, 0x00, payload.readUInt16LE(blk + 324));
+
         if (blk + 333 <= payload.length) {
           const flags = payload[blk + 332]; // bit0=polarity, bit1=mute
+          dsp(b3, 0x0c, 0x10, 0x00, flags & 0x01); // polarity
           dsp(b3, 0x07, 0x0c, 0x00, (flags >> 1) & 0x01); // mute
         }
       }
 
       if (sec + 134 <= payload.length) {
+        // Bus sends 1-12 (stride 6) and FX sends 1-4.
+        for (let bus = 0; bus < 12; bus++) {
+          dsp(b3, 0x07, 0x0e, 0x10 + bus, payload.readUInt16LE(sec + bus * 6));
+        }
         dsp(b3, 0x07, 0x0e, 0x20, payload.readUInt16LE(sec + 96)); // fader
+        dsp(b3, 0x07, 0x10, 0x20, payload[sec + 98]); // pan (byte 0..74)
+        for (let fx = 0; fx < 4; fx++) {
+          dsp(b3, 0x07, 0x0e, 0x23 + fx, payload.readUInt16LE(sec + 114 + fx * 6));
+        }
       }
     }
 
     // ── Stereo-link table ──────────────────────────────────────────────
-    // Located at offset 81548 in the ParamData blob: 48 × 4-byte entries.
-    //   [u16LE target] [flags] [0xfe]
-    // flags 0x0f = mono / left side; flags 0x10 = right side of a stereo pair.
-    // When linked, the right channel's `target` points to the left partner's b3.
-    const STEREO_TABLE = 81548;
-    const STEREO_STRIDE = 4;
-    const pairs: number[][] = [];
-    for (let b3 = 0; b3 <= 0x2f; b3++) {
-      const off = STEREO_TABLE + b3 * STEREO_STRIDE;
-      if (off + 4 > payload.length) break;
-      const target = payload.readUInt16LE(off);
-      const flags = payload[off + 2];
-      if (flags === 0x10 && target < b3) {
-        pairs.push([target, b3]);
-      }
-    }
-    if (pairs.length > 0) {
-      this.emit("stereoPairs", pairs);
-    }
+    // Fixed offset in the ParamData blob, decoded via stereo-links.ts.
+    // Two link encodings (classic right-side-backlink and slot-pair) — see
+    // the module docs. Validated against a real SQ-5 dump: 9/9 pairs.
+    const pairs = decodeStereoPairs(payload);
+    // Always emit: an empty list is meaningful (console has no linked pairs)
+    // and must clear any stale model state.
+    this.emit("stereoPairs", pairs);
   }
 
   private _startKeepalive(): void {

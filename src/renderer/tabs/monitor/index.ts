@@ -9,6 +9,12 @@
  *
  * FX returns (FX 1-4) are stereo sources: the L side is routed to the L
  * output, the R side to the R output.
+ *
+ * Console stereo-linked pairs are routed the way the console's own I/O
+ * screen does it: a single patch of the left (master) channel into the L
+ * output — the SQ derives the ganged right half onto the adjacent socket
+ * itself (odd/even socket-pair rule). A patch frame whose source is the
+ * right (slave) channel of a link is silently ignored by the console.
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
@@ -58,11 +64,10 @@ function populateMonitorSelects(): void {
   const opts = buildOutputOptions();
   for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
     sel.innerHTML = "";
-    // Placeholder
+    // Placeholder stays selectable — picking it deselects the output.
     const ph = document.createElement("option");
     ph.value = "";
     ph.textContent = "— не выбран —";
-    ph.disabled = true;
     sel.appendChild(ph);
     // Group by type
     const groups: Record<string, HTMLOptGroupElement> = {};
@@ -94,13 +99,13 @@ function populateMonitorSelects(): void {
 // ── source lock (until both outputs are chosen) ─────────────────────
 
 /**
- * Keep the source buttons (mixes, channels, FX returns, Main LR) disabled
- * until both L and R output selectors have a value — there is nothing to
- * route into otherwise. The "Применять" checkbox stays available: enabling
- * it before the outputs are chosen is what captures the routing snapshot.
+ * Keep the "Применять" toggle and the source buttons (mixes, channels, FX
+ * returns, Main LR) disabled until at least one of the L/R output selectors
+ * has a value — there is nothing to apply or route into otherwise.
  */
 function updateSourceLock(): void {
-  const locked = !elementRefs.monLDest.value || !elementRefs.monRDest.value;
+  const locked = !elementRefs.monLDest.value && !elementRefs.monRDest.value;
+  elementRefs.monEnable.disabled = locked;
   elementRefs.mainlrBtn.disabled = locked;
   for (const group of [elementRefs.mixButtons, elementRefs.chButtons, elementRefs.fxButtons]) {
     for (const b of group.querySelectorAll<HTMLButtonElement>("button")) {
@@ -135,6 +140,26 @@ function selectedDestKeys(): string[] {
 function recordBorrowedOutputs(): void {
   if (!monEnabled() || !borrowedKeys) return;
   for (const key of selectedDestKeys()) borrowedKeys.add(key);
+}
+
+/**
+ * Point the R selector at the output neighbouring L (same bank, channel+1).
+ * Mirrors the console's odd/even socket-pair rule for stereo sources: the
+ * right half of a ganged pair lands on the adjacent socket, so the UI should
+ * show exactly that. Skips safe outputs (disabled options) and missing
+ * neighbours (e.g. past the end of a bank).
+ */
+function alignRToLNeighbor(): void {
+  // L deselected — there is no neighbour to align to.
+  if (!elementRefs.monLDest.value) return;
+  const [destTypeHex, chStr] = elementRefs.monLDest.value.split(":");
+  const neighborVal = `${destTypeHex}:${Number(chStr) + 1}`;
+  if (elementRefs.monRDest.value === neighborVal) return;
+  if ([...elementRefs.monRDest.options].some((o) => o.value === neighborVal && !o.disabled)) {
+    elementRefs.monRDest.value = neighborVal;
+    recordBorrowedOutputs();
+    updateSourceLock();
+  }
 }
 
 /**
@@ -422,10 +447,12 @@ async function routeFxToOutput(
 
 /**
  * Route the currently selected source to the selected L/R monitor outputs:
- *   stereo pair   → left channel → L out, right channel → R out
- *   mono channel  → source → both L and R outs
- *   FX return     → L side → L out, R side → R out
- *   mix / Main LR → source → both L and R outs
+ *   linked stereo pair → left (master) channel → L out only; the console
+ *                        applies the right half to the adjacent socket
+ *   ad-hoc mono pair    → first channel → L out, second channel → R out
+ *   mono channel        → source → both L and R outs
+ *   FX return           → L side → L out, R side → R out
+ *   mix / Main LR       → source → both L and R outs
  * A deselection never changes the routing — the outputs keep the last source.
  */
 async function routeActiveSelection(): Promise<void> {
@@ -433,6 +460,16 @@ async function routeActiveSelection(): Promise<void> {
   const L = parseDest(elementRefs.monLDest);
   const R = parseDest(elementRefs.monRDest);
   if (leftChannelB3 !== null && rightChannelB3 !== null) {
+    // A console stereo-linked pair is one ganged source: the SQ accepts the
+    // output patch only for the left (master) channel and derives the right
+    // half itself (odd/even socket rule). Patch frames naming the right
+    // (slave) channel as the source are dropped by the console, so they are
+    // not sent at all.
+    const linkedPair = getStereoPair(leftChannelB3);
+    if (linkedPair && linkedPair[1] === rightChannelB3) {
+      await routeSourceToOutput(leftChannelB3, L);
+      return;
+    }
     await routeSourceToOutput(leftChannelB3, L);
     await routeSourceToOutput(rightChannelB3, R);
   } else if (leftChannelB3 !== null) {
@@ -812,6 +849,9 @@ async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): 
   leftChannelB3 = b3L;
   rightChannelB3 = b3R;
   btn.classList.add("active-l");
+  // The console routes a ganged pair by the odd/even socket rule — make sure
+  // the R selector shows the adjacent (L+1) socket the right half lands on.
+  alignRToLNeighbor();
   await routeActiveSelection();
 }
 
@@ -882,11 +922,7 @@ elementRefs.mainlrBtn.appendChild(buildChMeter());
 elementRefs.monLDest.addEventListener("change", async () => {
   // Auto-select the neighboring (channel+1) output for the right side —
   // unless it is a safe output (disabled).
-  const [destTypeHex, chStr] = elementRefs.monLDest.value.split(":");
-  const neighborVal = `${destTypeHex}:${Number(chStr) + 1}`;
-  if ([...elementRefs.monRDest.options].some((o) => o.value === neighborVal && !o.disabled)) {
-    elementRefs.monRDest.value = neighborVal;
-  }
+  alignRToLNeighbor();
   updateSourceLock();
   recordBorrowedOutputs();
   // Re-route the active source to the new L output.

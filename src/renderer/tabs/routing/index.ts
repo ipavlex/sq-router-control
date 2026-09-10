@@ -105,9 +105,15 @@ export function renderInputs(inputs: SnapshotInput[]): void {
       const p = stereoPairForLeft(r.destB3, state.stereoPairs);
       tr.dataset.b3r = String(p ? p[1] : -1);
     }
+    // Input number cell: Local sources use the ST labels (ST1–ST3 / XLR
+    // numbers) — the same labels as the Input Patching selectors.
     const inLabel = r._stereo
-      ? `${r.sourceChannel + 1}-${(r._rightSourceChannel ?? 0) + 1}`
-      : formatSourceChannel(r);
+      ? r.source === 0x01
+        ? localStereoPairLabel(r.sourceChannel)
+        : `${r.sourceChannel + 1}-${(r._rightSourceChannel ?? 0) + 1}`
+      : r.source === 0x01
+        ? localInputLabel(r.sourceChannel)
+        : formatSourceChannel(r);
     tr.innerHTML =
       `<td class="ch-cell">${escapeHtml(channelCellLabel(r.destLabel))}</td>` +
       `<td class="name-cell">${escapeHtml(r.name || "—")}</td>` +
@@ -275,16 +281,20 @@ const INPUT_SOURCES: { value: number; label: string }[] = [
 ];
 
 /**
- * Labels for the local line-input channels that follow the XLR bank:
- * ST1, ST2 (1/4" TRS pairs) and ST3 (3.5mm mini jack on the surface).
+ * Labels for the local line-input channels. On the wire the Local source
+ * bank is fixed for every SQ model: Local 1–48, then ST1, ST2 (1/4" TRS
+ * pairs) and ST3 (3.5mm mini jack on the surface) at wire channels 49–54
+ * (0-based 48–53). Confirmed on a real console: ST3 patches as 53/54.
+ * The talkback mic sits further up the bank at wire channel 59 (0-based 58).
  */
+const LOCAL_LINE_BASE = 48;
 const LOCAL_LINE_LABELS = ["ST1 L", "ST1 R", "ST2 L", "ST2 R", "ST3 L", "ST3 R"];
+const LOCAL_TALK_CHANNEL = 58;
 
-/** Option label for a 0-based local source channel: XLR number or ST label. */
+/** Option label for a 0-based local source channel: XLR number, ST label or Talk. */
 function localInputLabel(ch0: number): string {
-  const spec = state.modelSpec;
-  if (!spec) return String(ch0 + 1);
-  const lineIdx = ch0 - spec.xlrInputs;
+  if (ch0 === LOCAL_TALK_CHANNEL) return "Talk";
+  const lineIdx = ch0 - LOCAL_LINE_BASE;
   return lineIdx >= 0 && lineIdx < LOCAL_LINE_LABELS.length
     ? LOCAL_LINE_LABELS[lineIdx]
     : String(ch0 + 1);
@@ -292,18 +302,39 @@ function localInputLabel(ch0: number): string {
 
 /** Option label for a 0-based local stereo pair: "17-18" or "ST1". */
 function localStereoPairLabel(leftIdx: number): string {
-  const spec = state.modelSpec;
-  if (!spec) return `${leftIdx + 1}-${leftIdx + 2}`;
-  const pairIdx = Math.floor((leftIdx - spec.xlrInputs) / 2);
-  return leftIdx >= spec.xlrInputs && pairIdx < 3
+  const pairIdx = Math.floor((leftIdx - LOCAL_LINE_BASE) / 2);
+  return leftIdx >= LOCAL_LINE_BASE && pairIdx < 3
     ? `ST${pairIdx + 1}`
     : `${leftIdx + 1}-${leftIdx + 2}`;
+}
+
+/**
+ * Local mono source channels offered for the model: physical XLR inputs,
+ * then ST1–ST3 and the Talk mic at their fixed wire positions (the XLR
+ * bank numbers in between are not populated on smaller desks).
+ */
+function localMonoChannels(): number[] {
+  const xlr = state.modelSpec ? state.modelSpec.xlrInputs : LOCAL_LINE_BASE;
+  const list: number[] = [];
+  for (let ch = 0; ch < xlr && ch < LOCAL_LINE_BASE; ch++) list.push(ch);
+  for (let ch = 0; ch < LOCAL_LINE_LABELS.length; ch++) list.push(LOCAL_LINE_BASE + ch);
+  list.push(LOCAL_TALK_CHANNEL);
+  return list;
+}
+
+/** Local stereo-pair left channels offered for the model: XLR pairs + ST1–ST3. */
+function localStereoLefts(): number[] {
+  const xlr = state.modelSpec ? state.modelSpec.xlrInputs : LOCAL_LINE_BASE;
+  const list: number[] = [];
+  for (let ch = 0; ch + 1 < xlr && ch + 1 < LOCAL_LINE_BASE; ch += 2) list.push(ch);
+  for (let p = 0; p < 3; p++) list.push(LOCAL_LINE_BASE + p * 2);
+  return list;
 }
 
 /** Max channels available for a given source type (1-based count). */
 function maxSourceChannel(source: number): number {
   switch (source) {
-    case 0x01: return state.modelSpec ? state.modelSpec.localInputs : 48;
+    case 0x01: return LOCAL_TALK_CHANNEL + 1; // Local 1–48 + ST1–ST3 + Talk
     case 0x02: return 48;
     case 0x03: return state.modelSpec ? state.modelSpec.usbChannels : 32;
     case 0x04: return 64;
@@ -317,16 +348,25 @@ function populateInputNumberSelect(
   source: number,
   currentValue?: number | null
 ): void {
-  const max = maxSourceChannel(source);
   selectEl.innerHTML = "";
-  for (let i = 0; i < max; i++) {
-    const opt = document.createElement("option");
-    opt.value = String(i);
-    opt.textContent = source === 0x01 ? localInputLabel(i) : String(i + 1);
-    selectEl.appendChild(opt);
+  if (source === 0x01) {
+    for (const ch of localMonoChannels()) {
+      const opt = document.createElement("option");
+      opt.value = String(ch);
+      opt.textContent = localInputLabel(ch);
+      selectEl.appendChild(opt);
+    }
+  } else {
+    const max = maxSourceChannel(source);
+    for (let i = 0; i < max; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = String(i + 1);
+      selectEl.appendChild(opt);
+    }
   }
   const v = currentValue != null ? currentValue : Number(selectEl.dataset.prev);
-  if (v != null && v >= 0 && v < max) {
+  if (v != null && v >= 0 && selectEl.querySelector(`option[value="${v}"]`)) {
     selectEl.value = String(v);
   }
   selectEl.dataset.prev = selectEl.value;
@@ -341,22 +381,29 @@ function populateStereoInputNumberSelect(
   source: number,
   currentValue?: number | null
 ): void {
-  const max = maxSourceChannel(source);
-  const pairs = Math.floor(max / 2);
   selectEl.innerHTML = "";
-  for (let p = 0; p < pairs; p++) {
-    const leftIdx = p * 2;
-    const opt = document.createElement("option");
-    opt.value = String(leftIdx);
-    opt.textContent =
-      source === 0x01 ? localStereoPairLabel(leftIdx) : `${leftIdx + 1}-${leftIdx + 2}`;
-    selectEl.appendChild(opt);
+  if (source === 0x01) {
+    for (const left of localStereoLefts()) {
+      const opt = document.createElement("option");
+      opt.value = String(left);
+      opt.textContent = localStereoPairLabel(left);
+      selectEl.appendChild(opt);
+    }
+  } else {
+    const pairs = Math.floor(maxSourceChannel(source) / 2);
+    for (let p = 0; p < pairs; p++) {
+      const leftIdx = p * 2;
+      const opt = document.createElement("option");
+      opt.value = String(leftIdx);
+      opt.textContent = `${leftIdx + 1}-${leftIdx + 2}`;
+      selectEl.appendChild(opt);
+    }
   }
   // Round current value down to nearest even (left side of pair)
   const rounded = currentValue != null
     ? currentValue - (currentValue % 2)
     : (Number(selectEl.dataset.prev) || 0);
-  if (rounded >= 0 && rounded / 2 < pairs) {
+  if (rounded >= 0 && selectEl.querySelector(`option[value="${rounded}"]`)) {
     selectEl.value = String(rounded);
   }
   selectEl.dataset.prev = selectEl.value;
@@ -1148,18 +1195,39 @@ function mirrorScroll(srcWrap: HTMLElement, dstWrap: HTMLElement): void {
 
 // ── snapshot handling ────────────────────────────────────────────────
 
+/** Identity of the last rendered inputs list — detects state-only updates. */
+let lastInputsKey = "";
+
+function inputsKey(inputs: SnapshotInput[]): string {
+  return JSON.stringify(inputs.map((i) => [i.destB3, i.source, i.sourceChannel, i.name]));
+}
+
 /**
  * Apply a routing snapshot to the tab: update stereo pairs first (rebuilding
- * the monitor channel grid if they changed), then both tables.
+ * the monitor channel grid if they changed), then both tables. When only
+ * channel state changed (faders/mutes/gains), the snapshot is recorded but
+ * the tables are left as-is — no visible routing change, no rebuild.
  */
 export function onRoutingSnapshot(snapshot: SnapshotPayload): void {
   // Update stereo pairs FIRST so table merging uses fresh data.
   const pairsKey = JSON.stringify(snapshot.stereoPairs || []);
-  if (pairsKey !== JSON.stringify(state.stereoPairs)) {
+  const pairsChanged = pairsKey !== JSON.stringify(state.stereoPairs);
+  if (pairsChanged) {
     state.stereoPairs = snapshot.stereoPairs || [];
     buildChannelButtons();
     if (!editInputsFrozen) editInputsBuilt = false; // force rebuild of editable table
   }
+  // Channel state (fader / mute / gain / …) — decoded from the initial dump
+  // and refreshed by live DSP frames. Kept in renderer state for future use;
+  // not displayed in the table for now.
+  state.channelStates = new Map((snapshot.channels || []).map((c) => [c.b3, c]));
+
+  const iKey = inputsKey(snapshot.inputs);
+  if (!pairsChanged && iKey === lastInputsKey) {
+    // Same routing — nothing visible changed in this tab.
+    return;
+  }
+  lastInputsKey = iKey;
   renderInputs(snapshot.inputs);
   // After the initial burst the Input Patching table is frozen — later console
   // routing changes must not alter it (selectors stay active for editing).
@@ -1190,6 +1258,8 @@ export function reset(): void {
   lastUploadedSet = null;
   updateActivePatchingTitle();
   state.activeInputs = [];
+  state.channelStates = new Map();
+  lastInputsKey = "";
   clearMeters();
   elementRefs.editInputTbody.innerHTML = "";
   elementRefs.editSelAll.checked = false;

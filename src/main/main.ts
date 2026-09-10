@@ -9,9 +9,11 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { Connection, VersionInfo, DspFrame } from "./transport/connection";
 import { RoutingModel, InputPatch, OutputPatch, labelToB3, b3ToLabel, MONITOR_LABEL_TO_SOURCE, RoutingSnapshot } from "./routing";
+import { MixerState } from "./state";
 import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
 import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
+import { analyzeStereoTable } from "./paramdata-diagnostics";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -153,6 +155,8 @@ const DEMO_VARIANTS: DemoVariant[] = [
 class SQController {
   private conn: Connection | null = null;
   private model = new RoutingModel();
+  /** Live channel state (fader/mute/gain/…) fed by DSP frames + ParamData. */
+  private mixer = new MixerState();
   private host = "";
   private statusTimer: NodeJS.Timeout | null = null;
 
@@ -181,7 +185,13 @@ class SQController {
     return this.demoMode ? this.demoVersion : this.conn?.version ?? null;
   }
 
-  connect(host: string, port?: number): Promise<{ ok: true; version: VersionInfo } | { ok: false; error: string }> {
+  connect(
+    host: string,
+    port?: number
+  ): Promise<
+    | { ok: true; version: VersionInfo; spec: SQModelSpec }
+    | { ok: false; error: string }
+  > {
     // Tear down any previous session.
     this.disconnect();
 
@@ -190,6 +200,7 @@ class SQController {
 
     this.host = trimmed;
     this.model.reset();
+    this.mixer.reset();
     this.resetSceneState();
     const conn = new Connection({ host: trimmed, port });
     this.conn = conn;
@@ -198,7 +209,13 @@ class SQController {
 
     return conn
       .connect()
-      .then((version) => ({ ok: true as const, version }))
+      .then((version) => ({
+        ok: true as const,
+        version,
+        // The renderer derives Local/SLink/USB input counts and labels from
+        // the spec — without it the Input Patching selects fall back to 48.
+        spec: modelSpec(version.model),
+      }))
       .catch((err: NodeJS.ErrnoException) => {
         const msg =
           err && err.code === "ECONNREFUSED"
@@ -257,7 +274,11 @@ class SQController {
   }
 
   snapshot() {
-    return { ...this.model.snapshot(), currentSceneName: this.currentSceneName() };
+    return {
+      ...this.model.snapshot(),
+      currentSceneName: this.currentSceneName(),
+      channels: this.mixer.snapshot(),
+    };
   }
 
   /**
@@ -391,10 +412,18 @@ class SQController {
       level: "dsp",
       msg: `Input ${destLabel} → ${srcLabel} ${sourceChannel + 1}`,
     });
-    // In demo mode the model changed locally — flush so the UI reflects it.
-    if (this.demoMode) {
-      this.send("sq:routing", this.snapshot());
+    // Demo: sendPatchFrame already updated the local model above. Live: the
+    // mixer does not echo app-initiated input patches back on the
+    // subscription stream, so the model (and with it the Active Patching
+    // table) would stay stale forever. Apply the patch optimistically to the
+    // local model — any later echo or full dump simply re-asserts the
+    // console's truth over this value.
+    if (!this.demoMode && this.conn?.connected) {
+      this.applyInputPatch(destB3, source, sourceChannel);
     }
+    // The model now reflects the requested routing — flush so the UI
+    // (Active Patching) updates immediately.
+    this.send("sq:routing", this.snapshot());
   }
 
   /** Force the mixer to re-send its full routing/state dump. */
@@ -593,6 +622,8 @@ class SQController {
       const spec = modelSpec(0x01); // SQ-5: 16 local in, 12 XLR + 2 TRS out
 
       this.model.reset();
+      this.mixer.reset();
+      this.seedDemoMixerState();
       this.resetSceneState();
       this.demoBurstGen++;
 
@@ -646,6 +677,39 @@ class SQController {
   private applyMonitorPatch(source: number, dest: number, destChannel0: number): void {
     const raw = Buffer.from([0x0b, 0x0b, 0x0d, source, 0x11, destChannel0, dest]);
     this.model.handleDsp({ ch: source, category: 0x0b, register: 0x0d, modifier: 0x11, value: destChannel0 | (dest << 8), raw });
+  }
+
+  /**
+   * Populate the channel-state model with a plausible simulated show, the
+   * same way the real console's ParamData dump would. Values are fed through
+   * mixer.handleDsp as synthetic live frames, so the decode path is identical
+   * to a real connection.
+   */
+  private seedDemoMixerState(): void {
+    const dsp = (b3: number, category: number, register: number, modifier: number, value: number): void => {
+      this.mixer.handleDsp({ ch: b3, category, register, modifier, value, raw: Buffer.alloc(0) });
+    };
+    for (let b3 = 0; b3 <= 0x2f; b3++) {
+      // Fader between −12 and +3 dB (deterministic per channel).
+      dsp(b3, 0x07, 0x0e, 0x20, Math.round(0x8000 + (-12 + ((b3 * 7) % 16)) * 256));
+      // Every 9th channel starts muted.
+      dsp(b3, 0x07, 0x0c, 0x00, b3 % 9 === 8 ? 1 : 0);
+      // Preamp gain 20..44 dB, small trim variations.
+      dsp(b3, 0x0c, 0x0c, 0x01, Math.round(0x8000 + (20 + ((b3 * 5) % 25)) * 256));
+      dsp(b3, 0x0c, 0x0f, 0x00, Math.round(31724 + (((b3 * 3) % 7) - 3) * 212.5));
+      // Pan slightly off-center on some channels (wire 37 = center).
+      dsp(b3, 0x07, 0x10, 0x20, 37 + (((b3 % 5) - 2) * 6));
+      // HPF (100 Hz) on every third channel.
+      dsp(b3, 0x0e, 0x0c, 0x00, b3 % 3 === 1 ? 1 : 0);
+      dsp(b3, 0x0e, 0x0d, 0x00, Math.round(-9206 + 15308 * Math.log10(100)));
+      // Bus 1 send at half level on every 4th channel.
+      dsp(b3, 0x07, 0x0e, 0x10, b3 % 4 === 0 ? 35328 >> 1 : 0);
+    }
+    // Mix buses and Main LR faders.
+    for (let b3 = 0x58; b3 <= 0x68; b3++) {
+      dsp(b3, 0x07, 0x0e, 0x20, Math.round(0x8000 + (b3 === 0x68 ? 0 : -6) * 256));
+      dsp(b3, 0x07, 0x0c, 0x00, 0);
+    }
   }
 
   /**
@@ -801,6 +865,18 @@ class SQController {
         const action = scenarios[tick % scenarios.length];
         tick++;
         const desc = action();
+        // Rotate a live mute toggle so the channel-state column visibly
+        // updates between refreshes (exercises the live DSP update path).
+        const mch = (tick - 1) % 24;
+        const muted = Math.floor((tick - 1) / 24) % 2 === 1;
+        this.mixer.handleDsp({
+          ch: mch,
+          category: 0x07,
+          register: 0x0c,
+          modifier: 0x00,
+          value: muted ? 1 : 0,
+          raw: Buffer.alloc(0),
+        });
         this.send("sq:log", { level: "dsp", msg: ` Routing change: ${desc}` });
         this.send("sq:routing", this.snapshot());
       } catch (err) {
@@ -859,6 +935,8 @@ class SQController {
     this.currentSceneId = nextScene;
 
     this.model.reset();
+    this.mixer.reset();
+    this.seedDemoMixerState();
     this.model.routingBlockBytes = 928;
 
     // Channel names.
@@ -914,7 +992,25 @@ class SQController {
 
     conn.on("dsp", (d: DspFrame) => {
       const wasRouting = this.model.handleDsp(d);
-      if (wasRouting) dirty = true;
+      const wasState = this.mixer.handleDsp(d);
+      if (wasRouting || wasState) dirty = true;
+
+      // Scene-recall confirmation: F7 02 02 1c [sceneId] 00 FF FF — 0-based
+      // scene id. The mixer sends it after every completed recall (console
+      // surface, softkeys, MIDI). The SQ binary protocol has no way to QUERY
+      // the active scene, so this live frame is the only source of truth;
+      // until one arrives the active scene is genuinely unknown.
+      if (d.category === 0x02 && d.register === 0x1c && d.ch < 300) {
+        if (this.currentSceneId !== d.ch) {
+          this.currentSceneId = d.ch;
+          dirty = true;
+          const name = this.sceneNames.get(d.ch);
+          this.send("sq:log", {
+            level: "ok",
+            msg: `Scene recalled: ${d.ch + 1}${name ? ` — ${name}` : " (name not yet known)"}`,
+          });
+        }
+      }
 
       // Surface routing-relevant raw frames for the live monitor.
       if (
@@ -939,12 +1035,39 @@ class SQController {
       dirty = true;
     });
 
+    // First large ParamData blob of the session — save it together with a
+    // stereo-table report so firmware-specific layout shifts can be diagnosed
+    // (see paramdata-diagnostics.ts). Files are overwritten on each reconnect.
+    conn.on("paramDataSize", (size: number, payload: Buffer) => {
+      this.dumpParamData(payload, conn.version);
+    });
+
     // Scene library updates (full list dump arrives on connect).
     conn.on("sceneName", (id: number, name: string | null) => {
       if (name) this.sceneNames.set(id, name);
       else this.sceneNames.delete(id);
       dirty = true;
     });
+
+    // Scene-list dump summary: log the flag bytes seen on this console.
+    // Documented: 0x07 = stored scene, 0x00 = empty slot. If the active
+    // scene carries a distinctive flag, it will stand out in this log.
+    conn.on(
+      "sceneList",
+      (records: { id: number; flag: number; name: string | null }[]) => {
+        const namedFlags = Array.from(
+          new Set(records.filter((r) => r.name).map((r) => r.flag))
+        )
+          .map((f) => `0x${f.toString(16)}`)
+          .join(", ");
+        this.send("sq:log", {
+          level: "frame",
+          msg: `Scene list: ${records.length} slots, ${
+            records.filter((r) => r.name).length
+          } named (stored-scene flags: ${namedFlags || "—"}).`,
+        });
+      }
+    );
 
     // Individual scene record after a recall / rename / store — treat the
     // most recent one as the active scene (heuristic; see currentSceneName).
@@ -977,6 +1100,15 @@ class SQController {
       this.send("sq:log", {
         level: "ok",
         msg: `Routing decoded: ${snapshot.inputs.length} input patches, ${snapshot.outputs.length} output patches, ${snapshot.stereoPairs.length} stereo pairs.`,
+      });
+      // Channel state parsed from the initial ParamData dump: how many
+      // channels carry fader / mute / gain data right after connect.
+      const chans = this.mixer.snapshot();
+      const withFader = chans.filter((c) => c.faderDb !== null).length;
+      const withGain = chans.filter((c) => c.gainDb !== null).length;
+      this.send("sq:log", {
+        level: "ok",
+        msg: `Channel state from initial dump: ${chans.length} addresses (fader: ${withFader}, gain: ${withGain}). No need to wait for live changes.`,
       });
       flush();
       // Initial fill is complete — renderer freezes the Input Patching list.
@@ -1023,6 +1155,44 @@ class SQController {
     conn.on("error", (err: Error) => {
       this.send("sq:log", { level: "error", msg: `Connection error: ${err.message}` });
     });
+  }
+
+  /**
+   * Save the raw ParamData blob plus a stereo-table analysis report under
+   * userData/diagnostics. Called once per connection (first large blob).
+   */
+  private dumpParamData(payload: Buffer, version: VersionInfo | null): void {
+    try {
+      const dir = path.join(app.getPath("userData"), "diagnostics");
+      fs.mkdirSync(dir, { recursive: true });
+      const binPath = path.join(dir, "paramdata-dump.bin");
+      const txtPath = path.join(dir, "paramdata-stereo.txt");
+      fs.writeFileSync(binPath, payload);
+      const diag = analyzeStereoTable(payload);
+      fs.writeFileSync(txtPath, diag.report, "utf8");
+      const fw = version
+        ? ` ${version.modelName} FW ${version.fwA}.${version.fwB}`
+        : "";
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Diagnostics: ParamData saved (${payload.length} bytes${fw}): ${binPath}`,
+      });
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Diagnostics: stereo report: ${txtPath}`,
+      });
+      if (diag.bestOffset !== null) {
+        this.send("sq:log", {
+          level: "frame",
+          msg: `Diagnostics: best-matching stereo-table offset: ${diag.bestOffset}`,
+        });
+      }
+    } catch (e) {
+      this.send("sq:log", {
+        level: "warn",
+        msg: `Diagnostics: failed to write dump: ${(e as Error).message}`,
+      });
+    }
   }
 }
 

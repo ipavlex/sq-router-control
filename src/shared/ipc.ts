@@ -57,6 +57,32 @@ export interface SnapshotOutput {
   destChannel: number;
 }
 
+/**
+ * Per-channel mixer state (fader, mute, gain, …), decoded from the initial
+ * ParamData dump and kept fresh by live DSP frames. null = parameter unknown.
+ */
+export interface ChannelStateSnapshot {
+  b3: number;
+  /** Fader in dB (−Infinity = pulled down), null = no data. */
+  faderDb: number | null;
+  muted: boolean | null;
+  /** Pan −1..+1 (0 = center). */
+  pan: number | null;
+  gainDb: number | null;
+  trimDb: number | null;
+  polarityOn: boolean | null;
+  hpfOn: boolean | null;
+  hpfHz: number | null;
+  gateOn: boolean | null;
+  compOn: boolean | null;
+  delayOn: boolean | null;
+  delayMs: number | null;
+  /** Bus send levels 1-12, normalised 0..1 (1 = 0 dB / full). */
+  busSends: (number | null)[];
+  /** FX send levels 1-4, normalised 0..1. */
+  fxSends: (number | null)[];
+}
+
 export interface SnapshotPayload {
   inputs: SnapshotInput[];
   outputs: SnapshotOutput[];
@@ -65,6 +91,8 @@ export interface SnapshotPayload {
   routingBlockBytes: number | null;
   /** Name of the console's currently-active scene, if known. */
   currentSceneName?: string | null;
+  /** Channel state (faders, mutes, gains…) — filled right after connect. */
+  channels?: ChannelStateSnapshot[];
 }
 
 export interface StatusPayload {
