@@ -727,22 +727,24 @@ function applyMeters(m: MetersPayload | null): void {
       applyChMeter(meters[1] ?? null, m ? m.inputs[b3r] ?? null : null, m ? !!m.clip[b3r] : false);
     }
   }
-  // Mix buses + Main LR (demo mode only until the live format is decoded).
+  // Mix buses 1–12 (live from UDP packet 0x18).
   for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")) {
     const meter = btn.querySelector<HTMLElement>(".ch-meter");
     if (!meter) continue;
-    const b3 = Number(btn.dataset.b3);
-    if (b3 === 0x68) {
-      applyChMeter(meter, m ? m.mainLR ?? null : null, m ? !!m.mainLRClip : false);
-    } else {
-      const idx = b3 - 0x58;
-      applyChMeter(
-        meter,
-        m && m.mixes ? m.mixes[idx] ?? null : null,
-        m && m.mixClip ? !!m.mixClip[idx] : false
-      );
-    }
+    const idx = Number(btn.dataset.b3) - 0x58;
+    applyChMeter(
+      meter,
+      m && m.mixes ? m.mixes[idx] ?? null : null,
+      m && m.mixClip ? !!m.mixClip[idx] : false
+    );
   }
+  // Main LR button is static HTML in .monitor-setup — it is not inside
+  // #mix-buttons, so the loop above never reaches it.
+  applyChMeter(
+    elementRefs.mainlrBtn.querySelector<HTMLElement>(".ch-meter"),
+    m ? m.mainLR ?? null : null,
+    m ? !!m.mainLRClip : false
+  );
 }
 
 /** Apply one channel's reading to a single vertical meter. */
