@@ -598,6 +598,22 @@ async function onChannelClick(
   await routeActiveSelection();
 }
 
+/** Latest mix names (index 0 = Mix 1) — re-applied when buttons are rebuilt. */
+let lastMixNames: string[] = [];
+
+/**
+ * Update only the names of the existing mix buttons (without rebuilding the
+ * DOM, so active highlights and stereo bars survive routing updates).
+ */
+export function updateMixNames(names: string[]): void {
+  lastMixNames = names;
+  for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")) {
+    const mixIdx = Number(btn.dataset.b3) - 0x58;
+    const nameEl = btn.querySelector(".mix-btn-name");
+    if (nameEl) nameEl.textContent = names[mixIdx] ?? "";
+  }
+}
+
 export function buildMixButtons(): void {
   const container = elementRefs.mixButtons;
   container.innerHTML = "";
@@ -610,12 +626,21 @@ export function buildMixButtons(): void {
     const mixIdx = item.b3 - 0x58;
     const stereo = isMixStereo(mixIdx);
     btn.className = stereo ? "mix-btn mix-stereo" : "mix-btn";
-    btn.textContent = item.label;
     btn.dataset.b3 = String(item.b3);
-    // Vertical level meters at the left edge: two bars (L | R) on a
-    // stereo mix, one on a mono mix.
+    // Vertical level meters first (L, then R for stereo) — querySelector
+    // order maps them to the left/right sides.
     btn.appendChild(buildChMeter());
     if (stereo) btn.appendChild(buildChMeter());
+    // Label column: "Mix N" plus the console-assigned name underneath
+    // (kept fresh by updateMixNames without rebuilding the DOM).
+    const numEl = document.createElement("span");
+    numEl.className = "mix-btn-num";
+    numEl.textContent = item.label;
+    btn.appendChild(numEl);
+    const nameEl = document.createElement("span");
+    nameEl.className = "mix-btn-name";
+    nameEl.textContent = lastMixNames[mixIdx] ?? "";
+    btn.appendChild(nameEl);
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
     container.appendChild(btn);
   }
@@ -660,6 +685,22 @@ async function onFxClick(fxIndex: number, btn: HTMLButtonElement): Promise<void>
   await routeActiveSelection();
 }
 
+/** Latest FX return names (index 0 = FX 1) — re-applied when buttons are rebuilt. */
+let lastFxNames: string[] = [];
+
+/**
+ * Update only the names of the existing FX buttons (without rebuilding the
+ * DOM, so the active highlight survives routing updates).
+ */
+export function updateFxNames(names: string[]): void {
+  lastFxNames = names;
+  for (const btn of elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".fx-btn")) {
+    const fxIdx = Number(btn.dataset.fx);
+    const nameEl = btn.querySelector(".fx-btn-name");
+    if (nameEl) nameEl.textContent = names[fxIdx] ?? "";
+  }
+}
+
 function buildFxButtons(): void {
   const container = elementRefs.fxButtons;
   container.innerHTML = "";
@@ -668,8 +709,17 @@ function buildFxButtons(): void {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "fx-btn";
-    btn.textContent = `FX ${i + 1}`;
     btn.dataset.fx = String(i);
+    // Label column: "FX N" plus the console-assigned name underneath
+    // (kept fresh by updateFxNames without rebuilding the DOM).
+    const numEl = document.createElement("span");
+    numEl.className = "fx-btn-num";
+    numEl.textContent = `FX ${i + 1}`;
+    btn.appendChild(numEl);
+    const nameEl = document.createElement("span");
+    nameEl.className = "fx-btn-name";
+    nameEl.textContent = lastFxNames[i] ?? "";
+    btn.appendChild(nameEl);
     btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
@@ -976,9 +1026,11 @@ export function reset(): void {
   state.stereoPairs = [];
   state.mixStereoPairs = [];
   stereoObservedMixes.clear();
+  lastMixNames = []; // fresh session — no stale mix names
   buildMixButtons(); // rebuild without stereo bars
   lastMeters = null; // fresh session — don't re-apply stale readings
   buildChannelButtons();
+  lastFxNames = []; // fresh session — no stale FX names
   buildFxButtons();
   // Main LR active by default (UI-only — no command sent unless enabled)
   activeSourceB3 = 0x68;

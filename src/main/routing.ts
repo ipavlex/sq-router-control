@@ -130,6 +130,10 @@ export interface RoutingSnapshot {
   stereoPairs: number[][];
   /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
   mixStereoPairs: number[][];
+  /** Mix bus names 1-12 (index 0 = Mix 1), from the ParamData name blocks. */
+  mixNames: string[];
+  /** FX return names 1-4 (index 0 = FX 1), from the ParamData name blocks. */
+  fxNames: string[];
   /** number of routing update frames received. */
   updates: number;
   /** last routing/config block (sub=0x10) byte length, if any. */
@@ -266,6 +270,12 @@ export class RoutingModel {
   }
 
   snapshot(): RoutingSnapshot {
+    // Mix bus names in bus order (Mix 1-12 → b3 0x58-0x63).
+    const mixNames: string[] = [];
+    for (let i = 0; i < 12; i++) mixNames.push(this.names.get(0x58 + i) ?? "");
+    // FX return names in engine order (FX 1-4 → b3 0x40-0x43).
+    const fxNames: string[] = [];
+    for (let i = 0; i < 4; i++) fxNames.push(this.names.get(0x40 + i) ?? "");
     return {
       inputs: Array.from(this.inputPatches.values()).sort(
         (a, b) => a.destB3 - b.destB3
@@ -273,6 +283,8 @@ export class RoutingModel {
       outputs: [...this.outputPatches],
       stereoPairs: [...this.stereoPairs],
       mixStereoPairs: this.mixStereoPairs.map((p) => [...p]),
+      mixNames,
+      fxNames,
       updates: this.updates,
       routingBlockBytes: this.routingBlockBytes,
     };

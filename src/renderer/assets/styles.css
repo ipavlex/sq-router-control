@@ -1238,10 +1238,25 @@ h2.stereo-diff:hover::after {
   font-family: var(--mono);
   font-size: 16px;
   font-weight: 700;
-  padding: 16px 28px;
+  padding: 10px 18px;
   min-width: 88px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+/* Console-assigned mix name under the "Mix N" label. */
+.mix-btn-name {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  opacity: 0.8;
 }
 
 .mix-btn:hover:not(:disabled) {
@@ -1284,10 +1299,25 @@ h2.stereo-diff:hover::after {
   font-family: var(--mono);
   font-size: 14px;
   font-weight: 700;
-  padding: 12px 20px;
+  padding: 8px 14px;
   min-width: 72px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+/* Console-assigned FX name under the "FX N" label. */
+.fx-btn-name {
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  opacity: 0.8;
 }
 
 .fx-btn:hover:not(:disabled) {

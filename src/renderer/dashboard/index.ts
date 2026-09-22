@@ -53,6 +53,8 @@ window.sq.onStatus((p: StatusPayload) => {
 window.sq.onRouting((snapshot: SnapshotPayload) => {
   routing.onRoutingSnapshot(snapshot);
   monitor.updateChannelNames(snapshot.inputs);
+  monitor.updateMixNames(snapshot.mixNames ?? []);
+  monitor.updateFxNames(snapshot.fxNames ?? []);
   monitor.updateOutputUsage(snapshot.outputs);
   log.updateStat(snapshot);
   state.currentSceneName = snapshot.currentSceneName ?? null;

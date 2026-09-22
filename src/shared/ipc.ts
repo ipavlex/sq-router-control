@@ -89,6 +89,10 @@ export interface SnapshotPayload {
   stereoPairs: number[][];
   /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
   mixStereoPairs?: number[][];
+  /** Mix bus names 1-12 (index 0 = Mix 1), from the console's ParamData. */
+  mixNames?: string[];
+  /** FX return names 1-4 (index 0 = FX 1), from the console's ParamData. */
+  fxNames?: string[];
   updates: number;
   routingBlockBytes: number | null;
   /** Name of the console's currently-active scene, if known. */

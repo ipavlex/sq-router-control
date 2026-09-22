@@ -50,6 +50,14 @@ const DEMO_VARIANTS: DemoVariant[] = [
       32: "STM L", 33: "STM R", 34: "Clk T", 35: "Tlk T", 36: "MD L", 37: "MD R",
       38: "Sp 1", 39: "Sp 2", 40: "Sp 3", 41: "Sp 4", 42: "Sp 5", 43: "Sp 6",
       44: "Sp 7", 45: "Sp 8", 46: "Sp 9", 47: "Sp 10",
+      // FX returns 1-4 (b3 0x40-0x43)
+      0x40: "VoxRvb", 0x41: "Slap", 0x42: "Plate", 0x43: "DrumVb",
+      // Mix buses 1-12 (b3 0x58-0x63)
+      0x58: "IEM1 L", 0x59: "IEM1 R", // Mix 1-2 stereo
+      0x5a: "Drums", 0x5b: "Vox M", 0x5c: "Gtr M", 0x5d: "Key M",
+      0x5e: "Wedge", 0x5f: "Foldb",
+      0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
+      0x62: "Spill", 0x63: "Spare",
     },
     stereoPairs: [
       [2, 3], [6, 7], [8, 9], [14, 15], [16, 17],
@@ -89,6 +97,14 @@ const DEMO_VARIANTS: DemoVariant[] = [
       32: "Play L", 33: "Play R", 34: "Click", 35: "Talkbk",
       36: "Pad L", 37: "Pad R", 38: "Sfx 1", 39: "Sfx 2", 40: "Sfx 3", 41: "Sfx 4",
       42: "Sfx 5", 43: "Sfx 6", 44: "Sfx 7", 45: "Sfx 8", 46: "Sfx 9", 47: "Sfx 10",
+      // FX returns 1-4 (b3 0x40-0x43)
+      0x40: "Hall", 0x41: "TapeDl", 0x42: "Chorus", 0x43: "Spare",
+      // Mix buses 1-12 (b3 0x58-0x63)
+      0x58: "Band", 0x59: "Vocal",
+      0x5a: "IEM1 L", 0x5b: "IEM1 R", // Mix 3-4 stereo
+      0x5c: "Wedge", 0x5d: "Drums",
+      0x5e: "IEM2 L", 0x5f: "IEM2 R", // Mix 7-8 stereo
+      0x60: "IEM 3", 0x61: "IEM 4", 0x62: "Spare", 0x63: "Foldb",
     },
     stereoPairs: [
       [0, 1], [6, 7], [16, 17], [28, 29], [30, 31], [32, 33], [36, 37],
@@ -128,6 +144,13 @@ const DEMO_VARIANTS: DemoVariant[] = [
       32: "Lap L", 33: "Lap R", 34: "Cue 1", 35: "Cue 2", 36: "Cue 3", 37: "Cue 4",
       38: "Cue 5", 39: "Cue 6", 40: "Cue 7", 41: "Cue 8", 42: "Cue 9", 43: "Cue 10",
       44: "Cue 11", 45: "Cue 12", 46: "Cue 13", 47: "Cue 14",
+      // FX returns 1-4 (b3 0x40-0x43)
+      0x40: "Plate", 0x41: "Echo", 0x42: "Flange", 0x43: "Spare",
+      // Mix buses 1-12 (b3 0x58-0x63)
+      0x58: "Drums", 0x59: "Vox 1", 0x5a: "Vox 2", 0x5b: "Gtr M",
+      0x5c: "Bass", 0x5d: "Keys", 0x5e: "Horns", 0x5f: "IEM 1",
+      0x60: "IEM 2", 0x61: "Wedge",
+      0x62: "Rec L", 0x63: "Rec R", // Mix 11-12 stereo
     },
     stereoPairs: [
       [2, 3], [16, 17], [28, 29], [30, 31], [32, 33],
@@ -755,6 +778,14 @@ class SQController {
       42: "Sp 5", 43: "Sp 6",
       44: "Sp 7", 45: "Sp 8",
       46: "Sp 9", 47: "Sp 10",
+      // FX returns 1-4 (b3 0x40-0x43)
+      0x40: "VoxRvb", 0x41: "Slap", 0x42: "Plate", 0x43: "DrumVb",
+      // Mix buses 1-12 (b3 0x58-0x63)
+      0x58: "IEM1 L", 0x59: "IEM1 R", // Mix 1-2 stereo
+      0x5a: "Drums", 0x5b: "Vox M", 0x5c: "Gtr M", 0x5d: "Key M",
+      0x5e: "Wedge", 0x5f: "Foldb",
+      0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
+      0x62: "Spill", 0x63: "Spare",
     };
 
     // Each phase mutates the model, then a fresh snapshot is flushed to the UI.
