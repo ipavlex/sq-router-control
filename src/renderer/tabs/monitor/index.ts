@@ -445,6 +445,12 @@ async function routeFxToOutput(
   await window.sq.setFxOutputPatch(fxIndex, side, dest.destType, dest.destChannel);
 }
 
+/** Route one side of the console's PAFL (solo) bus to a physical output. */
+async function routePaflToOutput(side: "L" | "R", dest: Dest | null): Promise<void> {
+  if (!dest) return;
+  await window.sq.setMonitorOutput(side, dest.destType, dest.destChannel);
+}
+
 /**
  * Route the currently selected source to the selected L/R monitor outputs:
  *   linked stereo pair → left (master) channel → L out only; the console
@@ -452,6 +458,7 @@ async function routeFxToOutput(
  *   ad-hoc mono pair    → first channel → L out, second channel → R out
  *   mono channel        → source → both L and R outs
  *   FX return           → L side → L out, R side → R out
+ *   PAFL                → PAFL L → L out, PAFL R → R out (monitor patch)
  *   mix / Main LR       → source → both L and R outs
  * A deselection never changes the routing — the outputs keep the last source.
  */
@@ -478,6 +485,9 @@ async function routeActiveSelection(): Promise<void> {
   } else if (activeFxIndex !== null) {
     await routeFxToOutput(activeFxIndex, "L", L);
     await routeFxToOutput(activeFxIndex, "R", R);
+  } else if (paflActive) {
+    await routePaflToOutput("L", L);
+    await routePaflToOutput("R", R);
   } else if (activeSourceB3 !== null) {
     await routeSourceToOutput(activeSourceB3, L);
     await routeSourceToOutput(activeSourceB3, R);
@@ -508,9 +518,10 @@ async function toggleMixRoute(b3: number, btn: HTMLButtonElement): Promise<void>
   if (btn.classList.contains("active")) return;
 
   clearActiveMix();
-  // Also clear channel and FX selections when picking a mix
+  // Also clear channel, FX and PAFL selections when picking a mix
   clearChannelSelection();
   clearFxSelection();
+  clearPaflSelection();
   activeSourceB3 = b3;
   btn.classList.add("active");
   await routeActiveSelection();
@@ -538,9 +549,10 @@ async function onChannelClick(
   btn: HTMLButtonElement,
   shift = false
 ): Promise<void> {
-  // Selecting a channel clears any active mix and FX return.
+  // Selecting a channel clears any active mix, FX return and PAFL.
   clearActiveMix();
   clearFxSelection();
+  clearPaflSelection();
 
   // Click the R partner → solo it: R becomes the single mono selection
   // (routed to both L/R), the L channel is dropped.
@@ -670,9 +682,10 @@ function clearFxSelection(): void {
  * Clicking the active FX keeps it selected (no-op; ESC clears).
  */
 async function onFxClick(fxIndex: number, btn: HTMLButtonElement): Promise<void> {
-  // Selecting an FX return clears mixes and channel selections.
+  // Selecting an FX return clears mixes, channels and PAFL.
   clearActiveMix();
   clearChannelSelection();
+  clearPaflSelection();
 
   // Click the active FX → keep it selected.
   if (btn.classList.contains("active")) return;
@@ -723,7 +736,48 @@ function buildFxButtons(): void {
     btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
+  // PAFL source: the console's solo bus (PAFL L/R) — sits in the FX row but
+  // is its own source kind (monitor output patch, not an FX return).
+  const paflBtn = document.createElement("button");
+  paflBtn.type = "button";
+  paflBtn.className = "pafl-btn";
+  paflBtn.textContent = "PAFL";
+  paflBtn.title = "Соло-шина пульта (PAFL) → выбранные выходы";
+  paflBtn.addEventListener("click", () => onPaflClick(paflBtn));
+  container.appendChild(paflBtn);
   updateSourceLock();
+}
+
+// ── PAFL source button ───────────────────────────────────────────────
+
+/** Whether the console's PAFL (solo) bus is the active monitor source. */
+let paflActive = false;
+
+/** Clear the PAFL selection and highlight. */
+function clearPaflSelection(): void {
+  for (const b of elementRefs.fxButtons.querySelectorAll(".pafl-btn.active")) {
+    b.classList.remove("active");
+  }
+  paflActive = false;
+}
+
+/**
+ * PAFL click handler — routes the console's solo bus like a stereo pair:
+ * PAFL L → L output, PAFL R → R output (monitor output patch).
+ * Clicking the active PAFL keeps it selected (no-op; ESC clears).
+ */
+async function onPaflClick(btn: HTMLButtonElement): Promise<void> {
+  // Selecting PAFL clears mixes, channels and FX returns.
+  clearActiveMix();
+  clearChannelSelection();
+  clearFxSelection();
+
+  // Click the active PAFL → keep it selected.
+  if (btn.classList.contains("active")) return;
+
+  paflActive = true;
+  btn.classList.add("active");
+  await routeActiveSelection();
 }
 
 // ── channel buttons ─────────────────────────────────────────────────
@@ -956,9 +1010,10 @@ export function buildChannelButtons(): void {
 
 /** Click handler for a stereo pair — routes left ch to L out, right ch to R out. */
 async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): Promise<void> {
-  // Selecting a channel clears any active mix and FX return.
+  // Selecting a channel clears any active mix, FX return and PAFL.
   clearActiveMix();
   clearFxSelection();
+  clearPaflSelection();
 
   // Click the active stereo pair → keep it selected (no-op; ESC clears).
   if (btn.classList.contains("active-l")) return;
@@ -1037,6 +1092,7 @@ export function reset(): void {
   leftChannelB3 = null;
   rightChannelB3 = null;
   activeFxIndex = null;
+  paflActive = false;
   elementRefs.mainlrBtn.classList.add("active");
 }
 
@@ -1181,6 +1237,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   clearActiveMix();
   clearChannelSelection();
   clearFxSelection();
+  clearPaflSelection();
   elementRefs.mainlrBtn.classList.remove("active");
 
   // Uncheck the enable checkbox — this also restores the saved output

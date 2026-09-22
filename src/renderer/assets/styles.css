@@ -1291,7 +1291,8 @@ h2.stereo-diff:hover::after {
   justify-content: center;
 }
 
-.fx-btn {
+.fx-btn,
+.pafl-btn {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1320,25 +1321,34 @@ h2.stereo-diff:hover::after {
   opacity: 0.8;
 }
 
-.fx-btn:hover:not(:disabled) {
+/* PAFL source button — the console's solo bus, amber-tinted to stand out. */
+.pafl-btn {
+  color: var(--amber);
+}
+
+.fx-btn:hover:not(:disabled),
+.pafl-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }
 
-.fx-btn.active {
+.fx-btn.active,
+.pafl-btn.active {
   background: linear-gradient(135deg, var(--accent), #3ecf8e);
   border-color: transparent;
   color: #fff;
 }
 
-.fx-btn:active {
+.fx-btn:active,
+.pafl-btn:active {
   transform: scale(0.96);
 }
 
 /* ── Disabled source buttons (outputs not chosen yet) ──────────────── */
 .mix-btn:disabled,
 .ch-btn:disabled,
-.fx-btn:disabled {
+.fx-btn:disabled,
+.pafl-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

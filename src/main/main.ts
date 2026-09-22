@@ -324,20 +324,15 @@ class SQController {
       destType === 0x1d ? "USB" :
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
+    // Monitor output patch: source 0x00 = PAFL L, 0x01 = PAFL R (modifier 0x11).
+    this.sendPatchFrame(side === "L" ? 0x00 : 0x01, 0x11, ch0 & 0xff, destType & 0xff);
+    this.send("sq:log", {
+      level: "dsp",
+      msg: `Monitor ${srcLabel} → ${destName} Out ${destChannel}`,
+    });
+    // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
-      this.send("sq:log", {
-        level: "dsp",
-        msg: `Monitor ${srcLabel} → ${destName} Out ${destChannel}`,
-      });
-      return;
-    }
-    if (this.conn?.connected) {
-      const frame = Buffer.from([0xf7, 0x0b, 0x0b, 0x0d, side === "L" ? 0x00 : 0x01, 0x11, ch0 & 0xff, destType]);
-      this.conn.send(frame);
-      this.send("sq:log", {
-        level: "dsp",
-        msg: `Monitor ${srcLabel} → ${destName} Out ${destChannel}`,
-      });
+      this.send("sq:routing", this.snapshot());
     }
   }
 
