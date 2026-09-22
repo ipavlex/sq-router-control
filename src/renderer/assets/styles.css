@@ -1292,7 +1292,8 @@ h2.stereo-diff:hover::after {
 }
 
 .fx-btn,
-.pafl-btn {
+.pafl-btn,
+.mtx-btn {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1311,7 +1312,8 @@ h2.stereo-diff:hover::after {
 }
 
 /* Console-assigned FX name under the "FX N" label. */
-.fx-btn-name {
+.fx-btn-name,
+.mtx-btn-name {
   font-size: 12px;
   font-weight: 400;
   white-space: nowrap;
@@ -1326,21 +1328,29 @@ h2.stereo-diff:hover::after {
   color: var(--amber);
 }
 
+/* Extra gap before a new source group in the FX/PAFL/matrix row. */
+.src-break {
+  margin-left: 12px;
+}
+
 .fx-btn:hover:not(:disabled),
-.pafl-btn:hover:not(:disabled) {
+.pafl-btn:hover:not(:disabled),
+.mtx-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }
 
 .fx-btn.active,
-.pafl-btn.active {
+.pafl-btn.active,
+.mtx-btn.active {
   background: linear-gradient(135deg, var(--accent), #3ecf8e);
   border-color: transparent;
   color: #fff;
 }
 
 .fx-btn:active,
-.pafl-btn:active {
+.pafl-btn:active,
+.mtx-btn:active {
   transform: scale(0.96);
 }
 
@@ -1348,7 +1358,8 @@ h2.stereo-diff:hover::after {
 .mix-btn:disabled,
 .ch-btn:disabled,
 .fx-btn:disabled,
-.pafl-btn:disabled {
+.pafl-btn:disabled,
+.mtx-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

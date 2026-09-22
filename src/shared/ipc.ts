@@ -93,6 +93,11 @@ export interface SnapshotPayload {
   mixNames?: string[];
   /** FX return names 1-4 (index 0 = FX 1), from the console's ParamData. */
   fxNames?: string[];
+  /**
+   * Matrix slot names for b3 0x73-0x78 (index 0 = slot Matrix1-L). The 3
+   * stereo matrices occupy slot pairs: Matrix N = indexes 2(N-1), 2(N-1)+1.
+   */
+  matrixNames?: string[];
   updates: number;
   routingBlockBytes: number | null;
   /** Name of the console's currently-active scene, if known. */

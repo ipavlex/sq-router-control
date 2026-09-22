@@ -10,6 +10,10 @@
  * FX returns (FX 1-4) are stereo sources: the L side is routed to the L
  * output, the R side to the R output.
  *
+ * Matrices (3 stereo buses on the SQ, slot pairs at b3 0x73-0x78) follow the
+ * same L/R pattern: the matrix's L slot patches into the L output, the R
+ * slot into the R output (regular output-patch frames, like mixes).
+ *
  * Console stereo-linked pairs are routed the way the console's own I/O
  * screen does it: a single patch of the left (master) channel into the L
  * output — the SQ derives the ganged right half onto the adjacent socket
@@ -457,9 +461,10 @@ async function routePaflToOutput(side: "L" | "R", dest: Dest | null): Promise<vo
  *                        applies the right half to the adjacent socket
  *   ad-hoc mono pair    → first channel → L out, second channel → R out
  *   mono channel        → source → both L and R outs
- *   FX return           → L side → L out, R side → R out
- *   PAFL                → PAFL L → L out, PAFL R → R out (monitor patch)
- *   mix / Main LR       → source → both L and R outs
+  *   FX return           → L side → L out, R side → R out
+  *   PAFL                → PAFL L → L out, PAFL R → R out (monitor patch)
+  *   Matrix              → L slot (b3) → L out, R slot → R out (output patch)
+  *   mix / Main LR       → source → both L and R outs
  * A deselection never changes the routing — the outputs keep the last source.
  */
 async function routeActiveSelection(): Promise<void> {
@@ -488,6 +493,8 @@ async function routeActiveSelection(): Promise<void> {
   } else if (paflActive) {
     await routePaflToOutput("L", L);
     await routePaflToOutput("R", R);
+  } else if (activeMatrixIndex !== null) {
+    await routeMatrixToOutput(activeMatrixIndex, L, R);
   } else if (activeSourceB3 !== null) {
     await routeSourceToOutput(activeSourceB3, L);
     await routeSourceToOutput(activeSourceB3, R);
@@ -518,10 +525,11 @@ async function toggleMixRoute(b3: number, btn: HTMLButtonElement): Promise<void>
   if (btn.classList.contains("active")) return;
 
   clearActiveMix();
-  // Also clear channel, FX and PAFL selections when picking a mix
+  // Also clear channel, FX, PAFL and matrix selections when picking a mix
   clearChannelSelection();
   clearFxSelection();
   clearPaflSelection();
+  clearMatrixSelection();
   activeSourceB3 = b3;
   btn.classList.add("active");
   await routeActiveSelection();
@@ -549,10 +557,11 @@ async function onChannelClick(
   btn: HTMLButtonElement,
   shift = false
 ): Promise<void> {
-  // Selecting a channel clears any active mix, FX return and PAFL.
+  // Selecting a channel clears any active mix, FX return, PAFL and matrix.
   clearActiveMix();
   clearFxSelection();
   clearPaflSelection();
+  clearMatrixSelection();
 
   // Click the R partner → solo it: R becomes the single mono selection
   // (routed to both L/R), the L channel is dropped.
@@ -682,10 +691,11 @@ function clearFxSelection(): void {
  * Clicking the active FX keeps it selected (no-op; ESC clears).
  */
 async function onFxClick(fxIndex: number, btn: HTMLButtonElement): Promise<void> {
-  // Selecting an FX return clears mixes, channels and PAFL.
+  // Selecting an FX return clears mixes, channels, PAFL and matrix.
   clearActiveMix();
   clearChannelSelection();
   clearPaflSelection();
+  clearMatrixSelection();
 
   // Click the active FX → keep it selected.
   if (btn.classList.contains("active")) return;
@@ -740,11 +750,31 @@ function buildFxButtons(): void {
   // is its own source kind (monitor output patch, not an FX return).
   const paflBtn = document.createElement("button");
   paflBtn.type = "button";
-  paflBtn.className = "pafl-btn";
+  paflBtn.className = "pafl-btn src-break";
   paflBtn.textContent = "PAFL";
   paflBtn.title = "Соло-шина пульта (PAFL) → выбранные выходы";
   paflBtn.addEventListener("click", () => onPaflClick(paflBtn));
   container.appendChild(paflBtn);
+  // Matrix sources: 3 stereo matrices (slot pairs at b3 0x73-0x78) — same
+  // row, after PAFL. L slot → L output, R slot → R output on click.
+  for (let i = 0; i < MATRIX_COUNT; i++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    // First matrix starts a new group — extra gap from PAFL.
+    btn.className = i === 0 ? "mtx-btn src-break" : "mtx-btn";
+    btn.dataset.mtx = String(i);
+    btn.title = `Матрица ${i + 1} (L/R) → выбранные выходы`;
+    const numEl = document.createElement("span");
+    numEl.className = "mtx-btn-num";
+    numEl.textContent = `Mtx ${i + 1}`;
+    btn.appendChild(numEl);
+    const nameEl = document.createElement("span");
+    nameEl.className = "mtx-btn-name";
+    nameEl.textContent = lastMatrixNames[i * 2] ?? "";
+    btn.appendChild(nameEl);
+    btn.addEventListener("click", () => onMatrixClick(i, btn));
+    container.appendChild(btn);
+  }
   updateSourceLock();
 }
 
@@ -767,10 +797,11 @@ function clearPaflSelection(): void {
  * Clicking the active PAFL keeps it selected (no-op; ESC clears).
  */
 async function onPaflClick(btn: HTMLButtonElement): Promise<void> {
-  // Selecting PAFL clears mixes, channels and FX returns.
+  // Selecting PAFL clears mixes, channels, FX returns and matrix.
   clearActiveMix();
   clearChannelSelection();
   clearFxSelection();
+  clearMatrixSelection();
 
   // Click the active PAFL → keep it selected.
   if (btn.classList.contains("active")) return;
@@ -778,6 +809,86 @@ async function onPaflClick(btn: HTMLButtonElement): Promise<void> {
   paflActive = true;
   btn.classList.add("active");
   await routeActiveSelection();
+}
+
+// ── matrix source buttons ────────────────────────────────────────────
+
+/**
+ * Matrix buses: the SQ features 3 stereo matrices that can be split into up
+ * to 6 mono ones. All six slots are addressable at b3 0x73–0x78 — a stereo
+ * matrix occupies a slot pair (first slot = L side, second = R side), split
+ * mono matrices use the slots independently. Routing follows the FX-return
+ * pattern: L slot → L output, R slot → R output (regular output patches).
+ */
+const MATRIX_BASE_B3 = 0x73;
+const MATRIX_COUNT = 3;
+
+/** Index of the currently selected matrix (0-based), or null. */
+let activeMatrixIndex: number | null = null;
+
+/** Latest matrix slot names (index 0 = slot Matrix1-L), from the snapshot. */
+let lastMatrixNames: string[] = [];
+
+/** b3 of the L slot of matrix index (0-based); the R slot follows at +1. */
+function matrixSlotB3(matrixIndex: number, side: "L" | "R"): number {
+  return MATRIX_BASE_B3 + matrixIndex * 2 + (side === "R" ? 1 : 0);
+}
+
+/** Clear the matrix selection and highlight. */
+function clearMatrixSelection(): void {
+  for (const b of elementRefs.fxButtons.querySelectorAll(".mtx-btn.active")) {
+    b.classList.remove("active");
+  }
+  activeMatrixIndex = null;
+}
+
+/** Route both slots of a matrix: L slot → L output, R slot → R output. */
+async function routeMatrixToOutput(
+  matrixIndex: number,
+  L: Dest | null,
+  R: Dest | null
+): Promise<void> {
+  if (L) {
+    await window.sq.setOutputPatch(matrixSlotB3(matrixIndex, "L"), L.destType, L.destChannel);
+  }
+  if (R) {
+    await window.sq.setOutputPatch(matrixSlotB3(matrixIndex, "R"), R.destType, R.destChannel);
+  }
+}
+
+/**
+ * Matrix click handler — routes the matrix like a stereo pair:
+ * L slot → L output, R slot → R output (regular output-patch frames).
+ * Clicking the active matrix keeps it selected (no-op; ESC clears).
+ */
+async function onMatrixClick(matrixIndex: number, btn: HTMLButtonElement): Promise<void> {
+  // Selecting a matrix clears mixes, channels, FX returns and PAFL.
+  clearActiveMix();
+  clearChannelSelection();
+  clearFxSelection();
+  clearPaflSelection();
+
+  // Click the active matrix → keep it selected.
+  if (btn.classList.contains("active")) return;
+
+  clearMatrixSelection();
+  activeMatrixIndex = matrixIndex;
+  btn.classList.add("active");
+  await routeActiveSelection();
+}
+
+/**
+ * Update only the names of the existing matrix buttons (without rebuilding
+ * the DOM, so the active highlight survives routing updates). A stereo
+ * matrix shares its name across both slots — the L slot's name is shown.
+ */
+export function updateMatrixNames(names: string[]): void {
+  lastMatrixNames = names;
+  for (const btn of elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".mtx-btn")) {
+    const mtxIdx = Number(btn.dataset.mtx);
+    const nameEl = btn.querySelector(".mtx-btn-name");
+    if (nameEl) nameEl.textContent = names[mtxIdx * 2] ?? "";
+  }
 }
 
 // ── channel buttons ─────────────────────────────────────────────────
@@ -1010,10 +1121,11 @@ export function buildChannelButtons(): void {
 
 /** Click handler for a stereo pair — routes left ch to L out, right ch to R out. */
 async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): Promise<void> {
-  // Selecting a channel clears any active mix, FX return and PAFL.
+  // Selecting a channel clears any active mix, FX return, PAFL and matrix.
   clearActiveMix();
   clearFxSelection();
   clearPaflSelection();
+  clearMatrixSelection();
 
   // Click the active stereo pair → keep it selected (no-op; ESC clears).
   if (btn.classList.contains("active-l")) return;
@@ -1086,6 +1198,7 @@ export function reset(): void {
   lastMeters = null; // fresh session — don't re-apply stale readings
   buildChannelButtons();
   lastFxNames = []; // fresh session — no stale FX names
+  lastMatrixNames = []; // fresh session — no stale matrix names
   buildFxButtons();
   // Main LR active by default (UI-only — no command sent unless enabled)
   activeSourceB3 = 0x68;
@@ -1093,6 +1206,7 @@ export function reset(): void {
   rightChannelB3 = null;
   activeFxIndex = null;
   paflActive = false;
+  activeMatrixIndex = null;
   elementRefs.mainlrBtn.classList.add("active");
 }
 
@@ -1238,6 +1352,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   clearChannelSelection();
   clearFxSelection();
   clearPaflSelection();
+  clearMatrixSelection();
   elementRefs.mainlrBtn.classList.remove("active");
 
   // Uncheck the enable checkbox — this also restores the saved output

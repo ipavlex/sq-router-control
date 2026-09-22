@@ -74,6 +74,14 @@ export function b3ToLabel(b3: number): string {
   if (b3 >= 0x40 && b3 <= 0x43) return `FX ${b3 - 0x40 + 1}`;
   if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x58 + 1}`;
   if (b3 === 0x68) return "Main LR";
+  // Matrix buses: 6 slots (0x73–0x78); the 3 stereo matrices occupy slot
+  // pairs — first slot of a pair is the L side, second is R (SQ Reference
+  // Guide: "3 stereo matrix buses which can be split to provide up to 6
+  // mono matrices").
+  if (b3 >= 0x73 && b3 <= 0x78) {
+    const slot = b3 - 0x73;
+    return `Matrix ${Math.floor(slot / 2) + 1} ${slot % 2 === 0 ? "L" : "R"}`;
+  }
   return `b3 0x${b3.toString(16).padStart(2, "0")}`;
 }
 
@@ -134,6 +142,11 @@ export interface RoutingSnapshot {
   mixNames: string[];
   /** FX return names 1-4 (index 0 = FX 1), from the ParamData name blocks. */
   fxNames: string[];
+  /**
+   * Matrix slot names for b3 0x73–0x78 (index 0 = slot Matrix1-L). A stereo
+   * matrix normally carries the same name on both of its slots.
+   */
+  matrixNames: string[];
   /** number of routing update frames received. */
   updates: number;
   /** last routing/config block (sub=0x10) byte length, if any. */
@@ -276,6 +289,9 @@ export class RoutingModel {
     // FX return names in engine order (FX 1-4 → b3 0x40-0x43).
     const fxNames: string[] = [];
     for (let i = 0; i < 4; i++) fxNames.push(this.names.get(0x40 + i) ?? "");
+    // Matrix slot names (b3 0x73-0x78 → Matrix1-L … Matrix3-R).
+    const matrixNames: string[] = [];
+    for (let i = 0; i < 6; i++) matrixNames.push(this.names.get(0x73 + i) ?? "");
     return {
       inputs: Array.from(this.inputPatches.values()).sort(
         (a, b) => a.destB3 - b.destB3
@@ -285,6 +301,7 @@ export class RoutingModel {
       mixStereoPairs: this.mixStereoPairs.map((p) => [...p]),
       mixNames,
       fxNames,
+      matrixNames,
       updates: this.updates,
       routingBlockBytes: this.routingBlockBytes,
     };
