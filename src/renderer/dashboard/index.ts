@@ -78,9 +78,8 @@ window.sq.onMeters((p) => {
 // ── view switching (routing / log / monitor) ────────────────────────
 
 elementRefs.logBtn.addEventListener("click", () => {
-  const onLog = !elementRefs.viewLog.hidden;
-  showView(onLog ? "routing" : "log");
-  if (!onLog) elementRefs.log.scrollTop = elementRefs.log.scrollHeight;
+  showView("log");
+  elementRefs.log.scrollTop = elementRefs.log.scrollHeight;
 });
 elementRefs.routingBtn.addEventListener("click", () => showView("routing"));
 elementRefs.monitorBtn.addEventListener("click", () => showView("monitor"));

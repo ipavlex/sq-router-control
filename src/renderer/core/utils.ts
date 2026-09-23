@@ -198,10 +198,10 @@ export function showView(which: "routing" | "log" | "monitor"): void {
   elementRefs.viewRouting.hidden = which !== "routing";
   elementRefs.viewLog.hidden = which !== "log";
   elementRefs.viewMonitor.hidden = which !== "monitor";
-  elementRefs.logBtn.textContent = which === "log" ? "← Назад" : "📋 Журнал";
   // Highlight active tab
   elementRefs.routingBtn.classList.toggle("active", which === "routing");
   elementRefs.monitorBtn.classList.toggle("active", which === "monitor");
+  elementRefs.logBtn.classList.toggle("active", which === "log");
 }
 
 /**
