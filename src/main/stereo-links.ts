@@ -109,3 +109,108 @@ export function decodeStereoPairs(payload: Buffer): number[][] {
   }
   return pairs;
 }
+
+// ── Mix bus mono/stereo mode ────────────────────────────────────────────────
+//
+// The stereo-LINK table above covers input channels only. The mode of a MIX
+// bus (Mix 1-12, b3 0x58-0x63) is a separate per-bus flag stored inside the
+// 336-byte channel block, at byte +331 — the byte immediately before the
+// documented flags byte (+332 = polarity/mute). Observed values are 0 (mono)
+// and 1 (stereo).
+//
+// Evidence (two independent ParamData-layout snapshots):
+//   * a real SQ-5 console dump  → +331 = 1 for Mix 1-10 (5 stereo pairs),
+//     0 for Mix 11-12;
+//   * a MixPad CurrentShow dump → +331 = 1 for Mix 1-8 (4 stereo pairs),
+//     0 for Mix 9-12.
+// In both cases +331 is the ONLY byte in the 336-byte block that consistently
+// separates the stereo set from the mono set, and the set is always an even
+// prefix of the mix list — exactly how stereo mixes allocate adjacent buses.
+// It is not used by inputs, FX returns, Main LR or matrix buses (always 0
+// there), so it is a mix-bus-only mode flag.
+//
+// TODO(verify): confirm polarity (1 = stereo) with a controlled dump — toggle
+// one mix on the console and re-dump; expect a single-byte 0↔1 change at
+// `884 + (0x57 + mix)·336 + 331`.
+
+/** Channel parameter block base/stride in the ParamData blob. */
+export const CHANNEL_BLOCK_BASE = 884;
+export const CHANNEL_BLOCK_STRIDE = 336;
+/** Byte inside a channel block holding the mix bus mono/stereo mode. */
+export const BUS_MODE_OFFSET = 331;
+/** Mix buses occupy b3 0x58–0x63. */
+export const MIX_B3_FIRST = 0x58;
+export const MIX_BUS_COUNT = 12;
+
+/**
+ * Read a channel block's bus-mode byte (0 = mono, 1 = stereo) or null when
+ * the block is beyond the payload. Intended for mix buses (b3 0x58–0x63).
+ */
+export function readBusMode(payload: Buffer, b3: number): number | null {
+  const off = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE + BUS_MODE_OFFSET;
+  if (off >= payload.length) return null;
+  return payload[off] === 0 ? 0 : 1;
+}
+
+/** Per-mix stereo mode, index 0 = Mix 1. 1 = stereo, 0 = mono/unknown. */
+export function decodeMixModes(payload: Buffer): number[] {
+  const modes: number[] = [];
+  for (let i = 0; i < MIX_BUS_COUNT; i++) {
+    modes.push(readBusMode(payload, MIX_B3_FIRST + i) ?? 0);
+  }
+  return modes;
+}
+
+/**
+ * Stereo mix pairs from the ParamData channel blocks, as 0-based mix indexes:
+ * [[0, 1]] = Mix 1-2. Adjacent stereo mixes are reported as a pair; a stereo
+ * mix without a stereo neighbour is reported as a single-element-style
+ * [i, i] pair so the monitor still shows its L/R meter.
+ */
+export function decodeMixStereoPairs(payload: Buffer): number[][] {
+  const stereo = decodeMixModes(payload).map((m) => m === 1);
+  const pairs: number[][] = [];
+  const used = new Array<boolean>(MIX_BUS_COUNT).fill(false);
+  for (let i = 0; i < MIX_BUS_COUNT; i++) {
+    if (!stereo[i] || used[i]) continue;
+    if (i + 1 < MIX_BUS_COUNT && stereo[i + 1]) {
+      pairs.push([i, i + 1]);
+      used[i] = true;
+      used[i + 1] = true;
+    } else {
+      pairs.push([i, i]);
+      used[i] = true;
+    }
+  }
+  return pairs;
+}
+
+// ── Stereo-linked bus list (forensics / diagnostics) ────────────────────────
+//
+// The link region also carries encoding-A entries for non-input objects:
+// `[b3][0x0f][tail] [b3][0x10][tail]` marks b3 as the master of a stereo link.
+// On the reference console dump this yields matrix buses 0x73/0x74/0x75 (all
+// three matrices stereo), matching the console's actual configuration. Filtered
+// to bus addresses only — input links are decoded separately above.
+
+/** Bus b3 addresses in the link table (mixes, Main LR, matrix slots). */
+function isBusB3(t: number): boolean {
+  return (t >= 0x58 && t <= 0x63) || t === 0x68 || (t >= 0x73 && t <= 0x78);
+}
+
+/** Object addresses carrying an encoding-A stereo link, ascending. */
+export function decodeLinkedBuses(payload: Buffer): number[] {
+  const found = new Set<number>();
+  for (let o = 0; o + 8 <= payload.length; o++) {
+    const t = payload.readUInt16LE(o);
+    if (t === 0 || !isBusB3(t)) continue;
+    if (
+      payload.readUInt16LE(o + 4) === t &&
+      payload[o + 2] === 0x0f &&
+      payload[o + 6] === 0x10
+    ) {
+      found.add(t);
+    }
+  }
+  return Array.from(found).sort((a, b) => a - b);
+}

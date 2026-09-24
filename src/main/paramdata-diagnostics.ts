@@ -16,7 +16,52 @@ import {
   readStereoEntry,
   decodeStereoPairs,
   pairEncoding,
+  decodeMixModes,
+  decodeLinkedBuses,
+  readBusMode,
+  CHANNEL_BLOCK_BASE,
+  CHANNEL_BLOCK_STRIDE,
+  BUS_MODE_OFFSET,
+  MIX_B3_FIRST,
+  MIX_BUS_COUNT,
 } from "./stereo-links";
+
+/** Human label for a bus b3. */
+function busLabel(b3: number): string {
+  if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x57}`;
+  if (b3 === 0x68) return "Main LR";
+  if (b3 >= 0x73 && b3 <= 0x78) return `Matrix slot ${b3 - 0x72}`;
+  return `0x${b3.toString(16)}`;
+}
+
+/** Per-bus mono/stereo mode report (mix byte +331 + linked buses). */
+function busModeBlock(payload: Buffer): string {
+  const lines: string[] = [];
+  lines.push("--- Bus mono/stereo mode ---");
+  lines.push(
+    `Mix mode byte: block(${CHANNEL_BLOCK_BASE}) + b3·${CHANNEL_BLOCK_STRIDE} + ${BUS_MODE_OFFSET}`
+  );
+  const modes = decodeMixModes(payload);
+  for (let i = 0; i < MIX_BUS_COUNT; i++) {
+    const b3 = MIX_B3_FIRST + i;
+    const abs = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE + BUS_MODE_OFFSET;
+    lines.push(
+      `  Mix ${(i + 1).toString().padStart(2)} (b3 0x${b3.toString(16)} @ ${abs}): ` +
+        `${modes[i] === 1 ? "stereo" : "mono"} (0x${(
+          readBusMode(payload, b3) ?? 0
+        )
+          .toString(16)
+          .padStart(2, "0")})`
+    );
+  }
+  const linked = decodeLinkedBuses(payload);
+  lines.push(
+    `  Encoding-A linked buses in blob: ${
+      linked.map((b) => `${busLabel(b)} (0x${b.toString(16)})`).join(", ") || "none"
+    }`
+  );
+  return lines.join("\n");
+}
 
 interface Candidate {
   offset: number;
@@ -159,6 +204,8 @@ export function analyzeStereoTable(payload: Buffer): StereoDiagnostics {
       parts.push(entriesBlock(payload, c.offset));
     }
   }
+  parts.push("");
+  parts.push(busModeBlock(payload));
   parts.push("");
   parts.push("Raw blob: paramdata-dump.bin (same folder).");
   return {

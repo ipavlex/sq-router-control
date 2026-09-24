@@ -635,6 +635,19 @@ export function updateMixNames(names: string[]): void {
   }
 }
 
+/**
+ * Apply the stereo mix pairs decoded from ParamData (byte +331 of each mix's
+ * channel block, index 0 = Mix 1). Rebuilds the mix buttons only when the set
+ * changes, so stereo mixes immediately get their L/R meter bars.
+ */
+export function updateMixStereoPairs(pairs: number[][]): void {
+  const before = JSON.stringify(state.mixStereoPairs);
+  const next = pairs.map((p) => [...p]);
+  if (before === JSON.stringify(next)) return;
+  state.mixStereoPairs = next;
+  buildMixButtons();
+}
+
 export function buildMixButtons(): void {
   const container = elementRefs.mixButtons;
   container.innerHTML = "";

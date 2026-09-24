@@ -36,7 +36,11 @@ import {
 } from "./frame";
 import { BufferReader } from "./buffer";
 import { modelName } from "../models";
-import { decodeStereoPairs } from "../stereo-links";
+import {
+  decodeStereoPairs,
+  decodeMixStereoPairs,
+  decodeLinkedBuses,
+} from "../stereo-links";
 import {
   decodeMeterMessage,
   resetMeters,
@@ -630,6 +634,14 @@ export class Connection extends EventEmitter {
     // Always emit: an empty list is meaningful (console has no linked pairs)
     // and must clear any stale model state.
     this.emit("stereoPairs", pairs);
+
+    // Mix bus stereo mode (byte +331 of each mix channel block). Separate from
+    // the input link table — mixes are configured stereo/mono individually.
+    this.emit("mixStereoPairs", decodeMixStereoPairs(payload));
+
+    // Encoding-A stereo links for non-input buses (matrices, mixes, Main LR),
+    // decoded from the same blob region. Used for diagnostics only for now.
+    this.emit("busLinks", decodeLinkedBuses(payload));
   }
 
   private _startKeepalive(): void {

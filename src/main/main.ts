@@ -1085,6 +1085,30 @@ class SQController {
       dirty = true;
     });
 
+    // Mix bus mono/stereo mode read from each mix's 336-byte channel block
+    // (byte +331) — replaces the behavioural L/R latch with the console state.
+    conn.on("mixStereoPairs", (pairs: number[][]) => {
+      this.model.mixStereoPairs = pairs;
+      dirty = true;
+      if (pairs.length > 0) {
+        const list = pairs.map((p) => `${p[0] + 1}-${p[1] + 1}`).join(", ");
+        this.send("sq:log", {
+          level: "frame",
+          msg: `Stereo mixes (ParamData +331): ${list}`,
+        });
+      }
+    });
+
+    // Stereo-linked non-input buses (matrices/Main LR) from the link region.
+    conn.on("busLinks", (buses: number[]) => {
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Stereo-linked buses (link table): ${
+          buses.map((b) => `0x${b.toString(16)}`).join(", ") || "none"
+        }`,
+      });
+    });
+
     // First large ParamData blob of the session — save it together with a
     // stereo-table report so firmware-specific layout shifts can be diagnosed
     // (see paramdata-diagnostics.ts). Files are overwritten on each reconnect.
