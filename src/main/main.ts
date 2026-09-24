@@ -190,6 +190,10 @@ const DEMO_VARIANTS: DemoVariant[] = [
   },
 ];
 
+// Demo scene library (index = 0-based scene id). Scene 3 is intentionally
+// unnamed so the UI can exercise its "scene name unknown" placeholder/hint.
+const DEMO_SCENE_NAMES: Array<string | null> = ["Soundcheck", "Sunday Service", null];
+
 class SQController {
   private conn: Connection | null = null;
   private model = new RoutingModel();
@@ -660,10 +664,11 @@ class SQController {
       this.resetSceneState();
       this.demoBurstGen++;
 
-      // Simulated scene library + the currently-recalled scene.
-      this.sceneNames.set(0, "Soundcheck");
-      this.sceneNames.set(1, "Sunday Service");
-      this.sceneNames.set(2, "Rehearsal");
+      // Simulated scene library + the currently-recalled scene. Unnamed slots
+      // are simply omitted, so currentSceneName() resolves to null for them.
+      DEMO_SCENE_NAMES.forEach((name, id) => {
+        if (name) this.sceneNames.set(id, name);
+      });
       this.currentSceneId = 1;
 
       // Emit initial status + log.
@@ -971,10 +976,12 @@ class SQController {
     const variant = generation % DEMO_VARIANTS.length;
     const config = DEMO_VARIANTS[variant];
 
-    // Recall the next demo scene (cyclically).
-    const sceneNames = ["Soundcheck", "Sunday Service", "Rehearsal"];
-    const nextScene = ((this.currentSceneId ?? -1) + 1) % sceneNames.length;
+    // Recall the next demo scene (cyclically). Scene 3 is unnamed on purpose.
+    const nextScene = ((this.currentSceneId ?? -1) + 1) % DEMO_SCENE_NAMES.length;
     this.currentSceneId = nextScene;
+    const nextSceneName = DEMO_SCENE_NAMES[nextScene];
+    if (nextSceneName) this.sceneNames.set(nextScene, nextSceneName);
+    else this.sceneNames.delete(nextScene);
 
     this.model.reset();
     this.mixer.reset();
@@ -1005,7 +1012,7 @@ class SQController {
     const snap = this.snapshot();
     this.send("sq:log", {
       level: "ok",
-      msg: `Scene recalled: ${nextScene + 1} — ${sceneNames[nextScene]}`,
+      msg: `Scene recalled: ${nextScene + 1}${nextSceneName ? ` — ${nextSceneName}` : " (name not yet known)"}`,
     });
     this.send("sq:log", {
       level: "ok",

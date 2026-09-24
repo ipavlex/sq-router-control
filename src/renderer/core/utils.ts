@@ -186,11 +186,23 @@ export function todayStr(): string {
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
 }
 
-/** Show the current scene name in the topbar, if any. */
+/** Show the current scene name in the topbar, or a placeholder + hint when unknown. */
 export function updateSceneHint(): void {
-  elementRefs.topbarScene.textContent = state.currentSceneName
-    ? ` · 🎬 ${state.currentSceneName}`
-    : "";
+  const el = elementRefs.topbarScene;
+
+  if (state.currentSceneName) {
+    el.textContent = ` · 🎬 ${state.currentSceneName}`;
+    el.title = "";
+    return;
+  }
+
+  // Scene unknown: show a placeholder in place of the real name.
+  el.textContent = "";
+  const placeholder = document.createElement("span");
+  placeholder.className = "scene-placeholder";
+  placeholder.textContent = "🎬 UNKNOWN";
+  el.append(" · ", placeholder);
+  el.title = "Текущая сцена станет известна после рекола сцены на консоли";
 }
 
 /** Switch between the routing / log / monitor views. */
