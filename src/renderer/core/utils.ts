@@ -33,6 +33,7 @@ export const elementRefs: ElementRefs = {
   chButtons: $("#ch-buttons"),
   fxButtons: $("#fx-buttons"),
   mainlrBtn: $("#mainlr-btn"),
+  paflBtn: $("#pafl-btn"),
   monEnable: $("#mon-enable"),
   monSendDebug: $("#mon-send-debug"),
   monLockBtn: $("#mon-lock-btn"),

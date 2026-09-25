@@ -36,6 +36,7 @@ export interface ElementRefs {
   chButtons: HTMLElement;
   fxButtons: HTMLElement;
   mainlrBtn: HTMLButtonElement;
+  paflBtn: HTMLButtonElement;
   monEnable: HTMLInputElement;
   monSendDebug: HTMLElement;
   monLockBtn: HTMLButtonElement;

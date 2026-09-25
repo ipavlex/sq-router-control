@@ -1369,7 +1369,6 @@ h2.stereo-diff:hover::after {
 }
 
 .fx-btn,
-.pafl-btn,
 .mtx-btn {
   background: var(--bg-elev);
   border: 1px solid var(--border);
@@ -1400,25 +1399,27 @@ h2.stereo-diff:hover::after {
   opacity: 0.8;
 }
 
-/* PAFL source button — the console's solo bus, amber-tinted to stand out. */
+/* PAFL source button — the console's solo bus. Sits beside Main LR in the
+   setup row; amber-tinted to stand out from the green mix selection. */
 .pafl-btn {
+  font-size: 14px;
+  padding: 12px 20px;
+  min-width: auto;
   color: var(--amber);
 }
 
-/* Extra gap before a new source group in the FX/PAFL/matrix row. */
+/* Extra gap before a new source group in the FX/matrix row. */
 .src-break {
   margin-left: 12px;
 }
 
 .fx-btn:hover:not(:disabled),
-.pafl-btn:hover:not(:disabled),
 .mtx-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text);
 }
 
 .fx-btn.active,
-.pafl-btn.active,
 .mtx-btn.active {
   background: linear-gradient(135deg, var(--accent), #3ecf8e);
   border-color: transparent;
@@ -1426,7 +1427,6 @@ h2.stereo-diff:hover::after {
 }
 
 .fx-btn:active,
-.pafl-btn:active,
 .mtx-btn:active {
   transform: scale(0.96);
 }
@@ -1435,7 +1435,6 @@ h2.stereo-diff:hover::after {
 .mix-btn:disabled,
 .ch-btn:disabled,
 .fx-btn:disabled,
-.pafl-btn:disabled,
 .mtx-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;

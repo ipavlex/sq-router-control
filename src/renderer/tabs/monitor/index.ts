@@ -110,6 +110,7 @@ function updateSourceLock(): void {
   const locked = !elementRefs.monLDest.value && !elementRefs.monRDest.value;
   elementRefs.monEnable.disabled = locked;
   elementRefs.mainlrBtn.disabled = locked;
+  elementRefs.paflBtn.disabled = locked;
   for (const group of [elementRefs.mixButtons, elementRefs.chButtons, elementRefs.fxButtons]) {
     for (const b of group.querySelectorAll<HTMLButtonElement>("button")) {
       b.disabled = locked;
@@ -881,21 +882,13 @@ function buildFxButtons(): void {
     btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
-  // PAFL source: the console's solo bus (PAFL L/R) — sits in the FX row but
-  // is its own source kind (monitor output patch, not an FX return).
-  const paflBtn = document.createElement("button");
-  paflBtn.type = "button";
-  paflBtn.className = "pafl-btn src-break";
-  paflBtn.textContent = "PAFL";
-  paflBtn.title = "Соло-шина пульта (PAFL) → выбранные выходы";
-  paflBtn.addEventListener("click", () => onPaflClick(paflBtn));
-  container.appendChild(paflBtn);
   // Matrix sources: 3 stereo matrices (slot pairs at b3 0x73-0x78) — same
-  // row, after PAFL. L slot → L output, R slot → R output on click.
+  // row, after the FX returns. First matrix starts a new group. L slot → L
+  // output, R slot → R output on click.
   for (let i = 0; i < MATRIX_COUNT; i++) {
     const btn = document.createElement("button");
     btn.type = "button";
-    // First matrix starts a new group — extra gap from PAFL.
+    // First matrix starts a new group — extra gap from the FX returns.
     btn.className = i === 0 ? "mtx-btn src-break" : "mtx-btn";
     btn.dataset.mtx = String(i);
     btn.title = `Матрица ${i + 1} (L/R) → выбранные выходы`;
@@ -920,9 +913,7 @@ let paflActive = false;
 
 /** Clear the PAFL selection and highlight. */
 function clearPaflSelection(): void {
-  for (const b of elementRefs.fxButtons.querySelectorAll(".pafl-btn.active")) {
-    b.classList.remove("active");
-  }
+  elementRefs.paflBtn.classList.remove("active");
   paflActive = false;
 }
 
@@ -1327,6 +1318,7 @@ export function reset(): void {
   activeFxIndex = null;
   paflActive = false;
   activeMatrixIndex = null;
+  elementRefs.paflBtn.classList.remove("active");
   elementRefs.mainlrBtn.classList.add("active");
   renderSendDebug(planActiveSelection());
 }
@@ -1379,6 +1371,9 @@ for (const tab of elementRefs.monLockTabs.querySelectorAll<HTMLButtonElement>(".
 
 // Main LR button — routes Main LR like a mix selection
 elementRefs.mainlrBtn.addEventListener("click", () => toggleMixRoute(0x68, elementRefs.mainlrBtn));
+
+// PAFL button (static HTML, beside Main LR) — routes the console's solo bus.
+elementRefs.paflBtn.addEventListener("click", () => onPaflClick(elementRefs.paflBtn));
 
 // ── arrow key navigation (left/right) ────────────────────────────────
 // If a channel is active → arrows cycle through channels only.
