@@ -74,7 +74,8 @@ src/
 │       ├── frame.ts          # формат кадров, Sub-типы, Framer, энкодеры
 │       └── buffer.ts         # little-endian буфер чтения/записи
 ├── shared/
-│   └── ipc.ts                # общие типы IPC + интерфейс SqApi (window.sq)
+│   ├── ipc.ts                # общие типы IPC + интерфейс SqApi (window.sq)
+│   └── reaper-template.ts    # генератор .RTrackTemplate (USB-аутпатч → треки)
 └── renderer/                 # UI
     ├── index.ts              # точка входа webpack
     ├── assets/
@@ -163,6 +164,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 | `requestDump()` | `sq:requestDump` | Запрос полного дампа у пульта |
 | `getStatus()` | `sq:getStatus` | Статус (connected/version/spec) |
 | `setInputPatch(destB3, source, ch)` | `sq:setInputPatch` | Инпатч одного канала |
+| `exportFile(content, name, filter, ext)` | `sq:exportFile` | Сохранение файла через системный диалог (экспорт REAPER-шаблона) |
 | `setOutputPatch(sourceB3, type, ch)` | `sq:setOutputPatch` | Аутпатч |
 | `setFxOutputPatch(fx, side, type, ch)` | `sq:setFxOutputPatch` | Выход FX-возврата |
 | `setMonitorOutput(side, type, ch)` | `sq:setMonitorOutput` | Мониторный выход (PAFL) |
@@ -265,11 +267,44 @@ universal, подпись кода отключена (`identity: null`). Окн
 | `#topbar-sub` | Хост + версия прошивки (`FW A.B.C`) |
 | `#topbar-scene` | Активная сцена: `· 🎬 <имя>` (`updateSceneHint`) |
 | `🔊 Роутинг` / `🎧 Монитор` / `📋 Журнал` | Переключение вкладок |
+| `🎛 REAPER` | Экспорт шаблона треков REAPER (`.RTrackTemplate`) по USB-аутпатчу |
 | `Отключиться` | Разрыв и возврат на экран подключения |
 
 `showView("routing" | "log" | "monitor")` (`utils.ts:196-205`) прячет/показывает
 вью и подсвечивает активную кнопку. Кнопка «Журнал» при открытом журнале
 меняет текст на «← Назад» (см. [`LOG-TAB.md`](LOG-TAB.md)).
+
+### Экспорт шаблона REAPER
+
+Кнопка **🎛 REAPER** в топбаре формирует файл `.RTrackTemplate` для записи
+мультитрека через USB-интерфейс пульта. Логика — в `dashboard/index.ts`,
+генерация — чистая функция `buildReaperTracks` / `buildReaperTrackTemplate`
+в `src/shared/reaper-template.ts`.
+
+- В шаблон попадают только каналы, **реально назначенные на USB**
+  (аутпатч `dest = 0x1d`), отсортированные по номеру USB-канала;
+- **Стерео-пары → стерео-треки**: два соседних USB-канала с объявленной
+  стерео-парой (входные `stereoPairs` или `mixStereoPairs`) дают один
+  стерео-трек, иначе — моно-треки;
+- Имя трека — имя канала пульта (Input/Mix/FX/Matrix), иначе метка
+  источника (`Input 3-4`, `Mix 11-12`, `FX 1`, `Matrix 1`).
+
+Кодирование record input (`I_RECINPUT`):
+
+| Источник | Значение | Строка в шаблоне |
+|---|---|---|
+| Моно, USB-канал `n` (1-based) | `n − 1` | `REC 1 <n−1> 1 …`, `NCHAN 1` |
+| Стерео, USB-каналы `n`/`n+1` | `1024 + (n − 1)` | `REC 1 <1024+n−1> 1 …`, `NCHAN 2` |
+
+Файл содержит блоки `<TRACK>…</TRACK>` без обёртки `<REAPER_PROJECT>` (так
+устроены шаблоны самого REAPER) и ведущий блок мастера с
+`MASTERHWOUT 0 0 0 0 0 0 0 -1` — мастер-шина **не назначена ни на один
+физический выход**, чтобы сессия мультитрека не дублировала выходы пульта.
+Импорт: `Track → Insert tracks from template` либо drag-and-drop.
+
+Сохранение — через main-процесс: `window.sq.exportFile()` открывает
+системный диалог (`dialog.showSaveDialog`) и пишет UTF-8. Имя по умолчанию:
+`гггг.мм.дд {сцена} SQ multitrack.RTrackTemplate`.
 
 ## 9. Горячие клавиши
 
@@ -408,6 +443,3 @@ Mix-шин — 12, DCA — 8. `modelSpec()` определяет, какие и�
 ## TODO
 
 - новый раздел со снапшотами, например уровни посылов на эффекты, панорамы для ведущих вокалистов
-- экспорт темплейта для записи мультитрека через daw reaper — ведётся в отдельной
-  ветке `feature/reaper-track-template` (на момент написания ветка отстаёт от
-  `main` и уникальных коммитов не содержит — задел под задачу)

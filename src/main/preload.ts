@@ -5,6 +5,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   ConnectResult,
+  ExportFileResult,
   LogPayload,
   MetersPayload,
   ModelSpec,
@@ -37,6 +38,13 @@ contextBridge.exposeInMainWorld("sq", {
     ipcRenderer.invoke("sq:restoreOutputs", outputs),
   setInputPatch: (destB3: number, source: number, sourceChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setInputPatch", destB3, source, sourceChannel),
+  exportFile: (
+    content: string,
+    defaultFileName: string,
+    filterName: string,
+    extension: string
+  ): Promise<ExportFileResult> =>
+    ipcRenderer.invoke("sq:exportFile", content, defaultFileName, filterName, extension),
   startDemo: (): Promise<ConnectResult> => ipcRenderer.invoke("sq:startDemo"),
   getStatus: (): Promise<StatusPayload> => ipcRenderer.invoke("sq:getStatus"),
   onStatus: (cb: (p: StatusPayload) => void): (() => void) => {

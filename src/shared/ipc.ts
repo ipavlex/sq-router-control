@@ -138,6 +138,16 @@ export interface MetersPayload {
   mainLRClipR?: boolean;
 }
 
+/** Result of a "save file to disk" request driven by the main process. */
+export interface ExportFileResult {
+  ok: boolean;
+  /** True when the user dismissed the save dialog. */
+  canceled?: boolean;
+  /** Absolute path the file was written to (on success). */
+  path?: string;
+  error?: string;
+}
+
 export type LogLevel = "dsp" | "frame" | "ok" | "warn" | "error";
 
 export interface LogPayload {
@@ -165,6 +175,8 @@ export interface SqApi {
   /** Re-apply previously captured output patches (monitor session restore). */
   restoreOutputs(outputs: SnapshotOutput[]): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
   setInputPatch(destB3: number, source: number, sourceChannel: number): Promise<boolean>;
+  /** Save a generated file (e.g. a REAPER track template) via a save dialog. */
+  exportFile(content: string, defaultFileName: string, filterName: string, extension: string): Promise<ExportFileResult>;
   startDemo(): Promise<ConnectResult>;
   getStatus(): Promise<StatusPayload>;
   onStatus(cb: (p: StatusPayload) => void): () => void;

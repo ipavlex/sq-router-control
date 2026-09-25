@@ -53,6 +53,7 @@ export interface ElementRefs {
   clearLog: HTMLButtonElement;
   markLog: HTMLButtonElement;
   saveRoutingBtn: HTMLButtonElement;
+  exportReaperBtn: HTMLButtonElement;
   topbarScene: HTMLElement;
   saveFeedback: HTMLElement;
   saveModal: HTMLElement;

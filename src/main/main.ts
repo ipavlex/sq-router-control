@@ -4,7 +4,7 @@
  * Owns the SQ TCP connection and the routing model, and bridges them to the
  * renderer over IPC. The renderer never touches the network directly.
  */
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { Connection, VersionInfo, DspFrame } from "./transport/connection";
@@ -14,6 +14,7 @@ import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
 import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
 import { analyzeStereoTable } from "./paramdata-diagnostics";
+import type { ExportFileResult } from "../shared/ipc";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -1382,6 +1383,32 @@ function registerIpc(): void {
     controller.setInputPatch(destB3, source, sourceChannel);
     return true;
   });
+  ipcMain.handle(
+    "sq:exportFile",
+    async (
+      _e,
+      content: string,
+      defaultFileName: string,
+      filterName: string,
+      extension: string
+    ): Promise<ExportFileResult> => {
+      const options = {
+        title: "Сохранить файл",
+        defaultPath: defaultFileName,
+        filters: [{ name: filterName, extensions: [extension] }],
+      };
+      const res = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, options)
+        : await dialog.showSaveDialog(options);
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+      try {
+        await fs.promises.writeFile(res.filePath, content, "utf8");
+        return { ok: true, path: res.filePath };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  );
   ipcMain.handle("sq:getStatus", () => ({
     connected: controller.connected,
     version: controller.version,
