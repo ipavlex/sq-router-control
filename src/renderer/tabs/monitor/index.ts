@@ -14,15 +14,14 @@
  * same L/R pattern: the matrix's L slot patches into the L output, the R
  * slot into the R output (regular output-patch frames, like mixes).
  *
- * Console stereo-linked pairs are routed the way the console's own I/O
- * screen does it: a single patch of the left (master) channel into the L
- * output — the SQ derives the ganged right half onto the adjacent socket
- * itself (odd/even socket-pair rule). A patch frame whose source is the
- * right (slave) channel of a link is silently ignored by the console.
+ * Console stereo-linked pairs are patched as two explicit output-patch
+ * frames: the left channel into the L output, the right channel into the R
+ * output. The SQ does not derive the right half from the master patch, so
+ * both halves must be sent separately.
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
-import type { SnapshotInput, SnapshotOutput, MetersPayload } from "../../../shared/ipc";
+import type { SnapshotInput, SnapshotOutput, MetersPayload, OutputKey } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 
 // ── output selectors ─────────────────────────────────────────────────
@@ -148,10 +147,10 @@ function recordBorrowedOutputs(): void {
 
 /**
  * Point the R selector at the output neighbouring L (same bank, channel+1).
- * Mirrors the console's odd/even socket-pair rule for stereo sources: the
- * right half of a ganged pair lands on the adjacent socket, so the UI should
- * show exactly that. Skips safe outputs (disabled options) and missing
- * neighbours (e.g. past the end of a bank).
+ * Stereo pairs are most often patched to adjacent sockets (L, L+1), so the
+ * UI defaults to that; the user can still pick any other R output. Skips safe
+ * outputs (disabled options) and missing neighbours (e.g. past the end of a
+ * bank).
  */
 function alignRToLNeighbor(): void {
   // L deselected — there is no neighbour to align to.
@@ -178,17 +177,31 @@ async function onMonEnableChange(): Promise<void> {
     borrowedKeys = new Set(selectedDestKeys());
     await routeActiveSelection();
   } else {
-    const outputs = savedOutputs;
+    const outputs = savedOutputs ?? [];
     const keys = borrowedKeys;
     savedOutputs = null;
     borrowedKeys = null;
-    if (outputs && keys && keys.size > 0) {
-      const restore = outputs.filter((o) => keys.has(`${o.dest}:${o.destChannel}`));
-      if (restore.length > 0) {
-        await window.sq.restoreOutputs(restore);
+    if (keys && keys.size > 0) {
+      // Outputs with a known pre-session source are restored; outputs that
+      // were free before the session are cleared, so disabling "Применять"
+      // leaves no leftover monitor routing on them.
+      const savedByKey = new Map(outputs.map((o) => [`${o.dest}:${o.destChannel}`, o]));
+      const restore: SnapshotOutput[] = [];
+      const clear: OutputKey[] = [];
+      for (const key of keys) {
+        const rec = savedByKey.get(key);
+        if (rec) {
+          restore.push(rec);
+        } else {
+          const [dest, destChannel] = key.split(":").map(Number);
+          clear.push({ dest, destChannel });
+        }
       }
+      if (restore.length > 0) await window.sq.restoreOutputs(restore);
+      if (clear.length > 0) await window.sq.clearOutputs(clear);
     }
   }
+  renderSendDebug(planActiveSelection());
 }
 
 // ── output usage annotations ────────────────────────────────────────
@@ -415,6 +428,7 @@ function applySafeOutputLock(): void {
     }
   }
   updateSourceLock();
+  renderSendDebug(planActiveSelection());
 }
 
 /** Whether monitor changes should be applied to the actual mixer. */
@@ -430,75 +444,183 @@ function parseDest(sel: HTMLSelectElement): Dest | null {
   return { destType: parseInt(destTypeHex, 16), destChannel: Number(chStr) };
 }
 
-/** Route a source b3 to a physical output (output patch). */
-async function routeSourceToOutput(
-  sourceB3: number | null,
-  dest: Dest | null
-): Promise<void> {
-  if (sourceB3 === null || !dest) return;
-  await window.sq.setOutputPatch(sourceB3, dest.destType, dest.destChannel);
+// ── routing plan (also drives the debug readout) ─────────────────────
+
+/** One patch command the tab will send (or would send) to the console. */
+interface PlannedSend {
+  side: "L" | "R";
+  /** Target output selector value, or null when that side isn't chosen. */
+  dest: Dest | null;
+  kind: "bus" | "fx" | "pafl";
+  /** Source bus b3 for kind "bus". */
+  sourceB3?: number;
+  /** FX engine index / side for kind "fx". */
+  fxIndex?: number;
+  fxSide?: "L" | "R";
+  /** Human-readable source, e.g. "Mix 1". */
+  sourceLabel: string;
 }
 
-/** Route one side of an FX return to a physical output (FX output patch). */
-async function routeFxToOutput(
-  fxIndex: number,
-  side: "L" | "R",
-  dest: Dest | null
-): Promise<void> {
-  if (!dest) return;
-  await window.sq.setFxOutputPatch(fxIndex, side, dest.destType, dest.destChannel);
+/** Hex byte for the debug readout ("0x1a"). */
+function hexByte(n: number): string {
+  return `0x${n.toString(16).padStart(2, "0")}`;
 }
 
-/** Route one side of the console's PAFL (solo) bus to a physical output. */
-async function routePaflToOutput(side: "L" | "R", dest: Dest | null): Promise<void> {
-  if (!dest) return;
-  await window.sq.setMonitorOutput(side, dest.destType, dest.destChannel);
+/** Human label for a source b3 (mirrors main/routing.ts b3ToLabel). */
+function b3DebugLabel(b3: number): string {
+  if (b3 >= 0x00 && b3 <= 0x2f) return `Input ${b3 + 1}`;
+  if (b3 >= 0x40 && b3 <= 0x43) return `FX ${b3 - 0x40 + 1}`;
+  if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x58 + 1}`;
+  if (b3 === 0x68) return "Main LR";
+  if (b3 >= 0x73 && b3 <= 0x78) {
+    const slot = b3 - 0x73;
+    return `Matrix ${Math.floor(slot / 2) + 1} ${slot % 2 === 0 ? "L" : "R"}`;
+  }
+  return `b3 ${hexByte(b3)}`;
+}
+
+/** Human label for an output destination type. */
+function destTypeDebugName(destType: number): string {
+  return destType === 0x1a ? "Local Out" :
+    destType === 0x1b ? "ME" :
+    destType === 0x1c ? "SLink Out" :
+    destType === 0x1d ? "USB Out" :
+    destType === 0x1e ? "I/O Port Out" :
+    `dest ${hexByte(destType)}`;
+}
+
+/** "Local Out 1" / "— не выбран —" for the debug readout. */
+function destDebugLabel(dest: Dest | null): string {
+  return dest ? `${destTypeDebugName(dest.destType)} ${dest.destChannel}` : "— не выбран —";
+}
+
+/**
+ * Build the list of patches for the current source + L/R output selection.
+ * Mirrors exactly what routeActiveSelection() sends, so the debug readout
+ * shows the real commands.
+ */
+function planActiveSelection(): PlannedSend[] {
+  const L = parseDest(elementRefs.monLDest);
+  const R = parseDest(elementRefs.monRDest);
+  const plan: PlannedSend[] = [];
+
+  if (leftChannelB3 !== null && rightChannelB3 !== null) {
+    // A stereo pair (console-linked or ad-hoc) is patched as two separate
+    // output-patch frames: left half → L output, right half → R output. The
+    // SQ does NOT derive the right half from the master patch.
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rightChannelB3, sourceLabel: b3DebugLabel(rightChannelB3) });
+  } else if (leftChannelB3 !== null) {
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
+  } else if (activeFxIndex !== null) {
+    plan.push({ side: "L", dest: L, kind: "fx", fxIndex: activeFxIndex, fxSide: "L", sourceLabel: `FX ${activeFxIndex + 1} L` });
+    plan.push({ side: "R", dest: R, kind: "fx", fxIndex: activeFxIndex, fxSide: "R", sourceLabel: `FX ${activeFxIndex + 1} R` });
+  } else if (paflActive) {
+    plan.push({ side: "L", dest: L, kind: "pafl", sourceLabel: "PAFL L" });
+    plan.push({ side: "R", dest: R, kind: "pafl", sourceLabel: "PAFL R" });
+  } else if (activeMatrixIndex !== null) {
+    const lSlot = matrixSlotB3(activeMatrixIndex, "L");
+    const rSlot = matrixSlotB3(activeMatrixIndex, "R");
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: lSlot, sourceLabel: b3DebugLabel(lSlot) });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rSlot, sourceLabel: b3DebugLabel(rSlot) });
+  } else if (activeSourceB3 !== null) {
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: activeSourceB3, sourceLabel: b3DebugLabel(activeSourceB3) });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: activeSourceB3, sourceLabel: b3DebugLabel(activeSourceB3) });
+  }
+  return plan;
+}
+
+/** IPC call string for the debug readout, e.g. `setOutputPatch(0x58, 0x1a:1)`. */
+function planCommand(p: PlannedSend): string {
+  if (!p.dest) return "(выход не выбран)";
+  const dest = `${hexByte(p.dest.destType)}:${p.dest.destChannel}`;
+  if (p.kind === "bus" && p.sourceB3 !== undefined) return `setOutputPatch(${hexByte(p.sourceB3)}, ${dest})`;
+  if (p.kind === "fx") return `setFxOutputPatch(${p.fxIndex}, ${p.fxSide}, ${dest})`;
+  return `setMonitorOutput(${p.side}, ${dest})`;
+}
+
+/** Send one planned patch to the console (no-op when its output isn't chosen). */
+async function sendPlanned(p: PlannedSend): Promise<void> {
+  if (!p.dest) return;
+  if (p.kind === "bus" && p.sourceB3 !== undefined) {
+    await window.sq.setOutputPatch(p.sourceB3, p.dest.destType, p.dest.destChannel);
+  } else if (p.kind === "fx" && p.fxIndex !== undefined && p.fxSide) {
+    await window.sq.setFxOutputPatch(p.fxIndex, p.fxSide, p.dest.destType, p.dest.destChannel);
+  } else if (p.kind === "pafl") {
+    await window.sq.setMonitorOutput(p.side, p.dest.destType, p.dest.destChannel);
+  }
+}
+
+/**
+ * Render the debug readout under the L/R selectors: for every side, the
+ * selected output and the source that is (or would be) patched to it, with
+ * the exact IPC command. Visible even while "Применять" is off so the plan
+ * can be inspected before anything is sent.
+ */
+function renderSendDebug(plan: PlannedSend[]): void {
+  const container = elementRefs.monSendDebug;
+  if (!container) return;
+  container.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "mon-send-debug-title";
+  title.textContent = monEnabled() ? "Отправка на пульт: ВКЛ" : "Отправка на пульт: ВЫКЛ (показан план)";
+  container.appendChild(title);
+
+  if (plan.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "mon-send-debug-empty";
+    empty.textContent = "Источник не выбран";
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const p of plan) {
+    const row = document.createElement("div");
+    row.className = `mon-send-debug-row${monEnabled() ? "" : " off"}`;
+
+    const side = document.createElement("span");
+    side.className = `mon-send-debug-side ${p.side.toLowerCase()}`;
+    side.textContent = p.side;
+
+    const dest = document.createElement("span");
+    dest.className = "mon-send-debug-dest";
+    dest.textContent = destDebugLabel(p.dest);
+
+    const arrow = document.createElement("span");
+    arrow.className = "mon-send-debug-arrow";
+    arrow.textContent = "←";
+
+    const src = document.createElement("span");
+    src.className = "mon-send-debug-src";
+    src.textContent = p.sourceLabel;
+
+    const cmd = document.createElement("span");
+    cmd.className = "mon-send-debug-cmd";
+    cmd.textContent = planCommand(p);
+
+    row.append(side, dest, arrow, src, cmd);
+    container.appendChild(row);
+  }
 }
 
 /**
  * Route the currently selected source to the selected L/R monitor outputs:
- *   linked stereo pair → left (master) channel → L out only; the console
- *                        applies the right half to the adjacent socket
- *   ad-hoc mono pair    → first channel → L out, second channel → R out
+ *   stereo pair         → left channel → L out, right channel → R out
  *   mono channel        → source → both L and R outs
-  *   FX return           → L side → L out, R side → R out
-  *   PAFL                → PAFL L → L out, PAFL R → R out (monitor patch)
-  *   Matrix              → L slot (b3) → L out, R slot → R out (output patch)
-  *   mix / Main LR       → source → both L and R outs
+ *   FX return           → L side → L out, R side → R out
+ *   PAFL                → PAFL L → L out, PAFL R → R out (monitor patch)
+ *   Matrix              → L slot (b3) → L out, R slot → R out (output patch)
+ *   mix / Main LR       → source → both L and R outs
  * A deselection never changes the routing — the outputs keep the last source.
+ * The debug readout always reflects the plan, even when sending is off.
  */
 async function routeActiveSelection(): Promise<void> {
+  const plan = planActiveSelection();
+  renderSendDebug(plan);
   if (!monEnabled()) return;
-  const L = parseDest(elementRefs.monLDest);
-  const R = parseDest(elementRefs.monRDest);
-  if (leftChannelB3 !== null && rightChannelB3 !== null) {
-    // A console stereo-linked pair is one ganged source: the SQ accepts the
-    // output patch only for the left (master) channel and derives the right
-    // half itself (odd/even socket rule). Patch frames naming the right
-    // (slave) channel as the source are dropped by the console, so they are
-    // not sent at all.
-    const linkedPair = getStereoPair(leftChannelB3);
-    if (linkedPair && linkedPair[1] === rightChannelB3) {
-      await routeSourceToOutput(leftChannelB3, L);
-      return;
-    }
-    await routeSourceToOutput(leftChannelB3, L);
-    await routeSourceToOutput(rightChannelB3, R);
-  } else if (leftChannelB3 !== null) {
-    await routeSourceToOutput(leftChannelB3, L);
-    await routeSourceToOutput(leftChannelB3, R);
-  } else if (activeFxIndex !== null) {
-    await routeFxToOutput(activeFxIndex, "L", L);
-    await routeFxToOutput(activeFxIndex, "R", R);
-  } else if (paflActive) {
-    await routePaflToOutput("L", L);
-    await routePaflToOutput("R", R);
-  } else if (activeMatrixIndex !== null) {
-    await routeMatrixToOutput(activeMatrixIndex, L, R);
-  } else if (activeSourceB3 !== null) {
-    await routeSourceToOutput(activeSourceB3, L);
-    await routeSourceToOutput(activeSourceB3, R);
-  }
+  for (const p of plan) await sendPlanned(p);
 }
 
 // ── mix group buttons ───────────────────────────────────────────────
@@ -855,20 +977,6 @@ function clearMatrixSelection(): void {
   activeMatrixIndex = null;
 }
 
-/** Route both slots of a matrix: L slot → L output, R slot → R output. */
-async function routeMatrixToOutput(
-  matrixIndex: number,
-  L: Dest | null,
-  R: Dest | null
-): Promise<void> {
-  if (L) {
-    await window.sq.setOutputPatch(matrixSlotB3(matrixIndex, "L"), L.destType, L.destChannel);
-  }
-  if (R) {
-    await window.sq.setOutputPatch(matrixSlotB3(matrixIndex, "R"), R.destType, R.destChannel);
-  }
-}
-
 /**
  * Matrix click handler — routes the matrix like a stereo pair:
  * L slot → L output, R slot → R output (regular output-patch frames).
@@ -1148,12 +1256,11 @@ async function onStereoClick(b3L: number, b3R: number, btn: HTMLButtonElement): 
     await clearAllChannels();
   }
 
-  // Assign stereo pair: left channel → L output, right channel → R output.
+  // Assign stereo pair: left channel → L output, right channel → R output
+  // (two separate patch frames). Default the R output to the adjacent socket.
   leftChannelB3 = b3L;
   rightChannelB3 = b3R;
   btn.classList.add("active-l");
-  // The console routes a ganged pair by the odd/even socket rule — make sure
-  // the R selector shows the adjacent (L+1) socket the right half lands on.
   alignRToLNeighbor();
   await routeActiveSelection();
 }
@@ -1221,6 +1328,7 @@ export function reset(): void {
   paflActive = false;
   activeMatrixIndex = null;
   elementRefs.mainlrBtn.classList.add("active");
+  renderSendDebug(planActiveSelection());
 }
 
 // ── bindings ─────────────────────────────────────────────────────────

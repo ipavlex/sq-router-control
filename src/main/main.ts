@@ -14,6 +14,7 @@ import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
 import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
 import { analyzeStereoTable } from "./paramdata-diagnostics";
+import type { OutputKey } from "../shared/ipc";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -585,6 +586,31 @@ class SQController {
       this.send("sq:routing", this.snapshot());
     }
     return { ok: true, applied, skipped };
+  }
+
+  /**
+   * Clear the given physical outputs in the local model — the monitor session
+   * restore uses this for borrowed outputs that had no known routing before
+   * the session. There is no documented "no source" output-patch frame, so on
+   * live hardware this only fixes the app's view; in demo mode the model is
+   * authoritative and the UI updates immediately.
+   */
+  clearOutputs(outputs: OutputKey[]): { ok: boolean; cleared: number } {
+    let cleared = 0;
+    for (const o of outputs ?? []) {
+      if (typeof o?.dest === "number" && typeof o?.destChannel === "number") {
+        this.model.clearOutput(o.dest, o.destChannel);
+        cleared++;
+      }
+    }
+    this.send("sq:log", {
+      level: "ok",
+      msg: `Очищено выходов: ${cleared}.`,
+    });
+    if (this.demoMode) {
+      this.send("sq:routing", this.snapshot());
+    }
+    return { ok: true, cleared };
   }
 
   /** Reconstruct the 4 payload fields of an output-patch frame from a saved record. */
@@ -1401,6 +1427,9 @@ function registerIpc(): void {
   );
   ipcMain.handle("sq:restoreOutputs", (_e, outputs: OutputPatch[]) =>
     controller.restoreOutputs(outputs)
+  );
+  ipcMain.handle("sq:clearOutputs", (_e, outputs: OutputKey[]) =>
+    controller.clearOutputs(outputs)
   );
   ipcMain.handle("sq:setInputPatch", (_e, destB3: number, source: number, sourceChannel: number) => {
     controller.setInputPatch(destB3, source, sourceChannel);

@@ -1127,6 +1127,78 @@ h2.stereo-diff:hover::after {
   flex-wrap: wrap;
 }
 
+/* Debug readout: what is (or would be) patched to each selected output. */
+.mon-send-debug {
+  flex: 0 0 auto;
+  margin: 0 24px 12px;
+  padding: 10px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  max-height: 140px;
+  overflow: auto;
+}
+
+.mon-send-debug-title {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+
+.mon-send-debug-empty {
+  color: var(--text-faint);
+}
+
+.mon-send-debug-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+
+.mon-send-debug-row.off {
+  opacity: 0.55;
+}
+
+.mon-send-debug-side {
+  width: 14px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.mon-send-debug-side.l {
+  color: var(--accent);
+}
+
+.mon-send-debug-side.r {
+  color: #3ecf8e;
+}
+
+.mon-send-debug-dest {
+  min-width: 150px;
+  color: var(--text);
+}
+
+.mon-send-debug-arrow {
+  color: var(--text-faint);
+}
+
+.mon-send-debug-src {
+  color: var(--text);
+}
+
+.mon-send-debug-cmd {
+  margin-left: auto;
+  color: var(--text-faint);
+}
+
 /* Padlock button — opens the output selection modal. */
 .mon-lock-btn {
   position: relative;

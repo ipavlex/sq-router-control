@@ -8,6 +8,7 @@ import type {
   LogPayload,
   MetersPayload,
   ModelSpec,
+  OutputKey,
   SnapshotPayload,
   StatusPayload,
 } from "../shared/ipc";
@@ -35,6 +36,8 @@ contextBridge.exposeInMainWorld("sq", {
     outputs: SnapshotPayload["outputs"]
   ): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }> =>
     ipcRenderer.invoke("sq:restoreOutputs", outputs),
+  clearOutputs: (outputs: OutputKey[]): Promise<{ ok: boolean; cleared: number }> =>
+    ipcRenderer.invoke("sq:clearOutputs", outputs),
   setInputPatch: (destB3: number, source: number, sourceChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setInputPatch", destB3, source, sourceChannel),
   startDemo: (): Promise<ConnectResult> => ipcRenderer.invoke("sq:startDemo"),

@@ -275,6 +275,21 @@ export class RoutingModel {
     this.outputPatches.push(record);
   }
 
+  /**
+   * Remove whatever is patched to a physical output. Used by the monitor
+   * session restore for borrowed outputs that had no known routing before the
+   * session (e.g. demo outputs that were never seeded).
+   */
+  clearOutput(dest: number, destChannel: number): void {
+    const next = this.outputPatches.filter(
+      (p) => !(p.dest === dest && p.destChannel === destChannel)
+    );
+    if (next.length !== this.outputPatches.length) {
+      this.outputPatches = next;
+      this.updates++;
+    }
+  }
+
   setChannelName(b3: number, name: string): void {
     this.names.set(b3, name);
     // Keep any existing input patch in sync.

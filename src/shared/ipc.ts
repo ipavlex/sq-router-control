@@ -57,6 +57,12 @@ export interface SnapshotOutput {
   destChannel: number;
 }
 
+/** Minimal (destType, destChannel) pair — identifies one physical output. */
+export interface OutputKey {
+  dest: number;
+  destChannel: number;
+}
+
 /**
  * Per-channel mixer state (fader, mute, gain, …), decoded from the initial
  * ParamData dump and kept fresh by live DSP frames. null = parameter unknown.
@@ -164,6 +170,8 @@ export interface SqApi {
   }): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
   /** Re-apply previously captured output patches (monitor session restore). */
   restoreOutputs(outputs: SnapshotOutput[]): Promise<{ ok: boolean; applied: number; skipped: number; error?: string }>;
+  /** Clear outputs whose pre-session routing is unknown (monitor session restore). */
+  clearOutputs(outputs: OutputKey[]): Promise<{ ok: boolean; cleared: number }>;
   setInputPatch(destB3: number, source: number, sourceChannel: number): Promise<boolean>;
   startDemo(): Promise<ConnectResult>;
   getStatus(): Promise<StatusPayload>;
