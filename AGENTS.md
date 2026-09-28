@@ -18,16 +18,19 @@ Electron-приложение для мониторинга и управлен�
 | `npm run build:dev` | Dev-сборка |
 | `npm run watch` | webpack в режиме watch (dev) |
 | `npm run typecheck` | `tsc --noEmit` — **единственная** проверка типов |
+| `npm test` | Юнит-тесты чистых декодеров (`node --test` + `tsx`, без пульта) |
 | `npm start` | `build` + `electron .` |
 | `npm run dev` | `build:dev` + `electron . --enable-logging` |
 | `npm run pack` / `dist` | Сборка в `release/` (без установщика / с установщиками) |
 
-**Важно: автотестов нет.** Test-скрипта в `package.json` нет, тестовых файлов
-в `src/` нет. `ts-loader` работает в `transpileOnly: true`, поэтому ошибки типов
-**не** ловятся сборкой — после правок всегда запускай `npm run typecheck` **и**
-`npm run build`.
+**Автотесты есть, но покрывают только чистые декодеры.** `npm test` запускает
+`node:test` через `tsx` и не требует ни пульта, ни Electron; тесты лежат рядом с
+модулями как `*.test.ts` (`src/main/transport/*.ts`, `meters.ts`,
+`stereo-links.ts`, `routing.ts`, `state.ts`). `ts-loader` работает в
+`transpileOnly: true`, поэтому ошибки типов **не** ловятся сборкой — после правок
+всегда запускай `npm run typecheck`, `npm test` **и** `npm run build`.
 
-Проверка без реального пульта: `typecheck` + `build` + **демо-режим**
+Проверка без реального пульта: `typecheck` + `test` + `build` + **демо-режим**
 (полная симуляция SQ-5, `src/main/demo-meters.ts`).
 
 ## 3. Архитектура (кратко)
@@ -98,8 +101,8 @@ Electron-приложение для мониторинга и управлен�
 1. Ознакомься с профильным `docs/*.md` и, если правишь UI, — с `AGENTS.md` §5.
 2. Атомарные задачи из `docs/BACKLOG-NO-CONSOLE.md` бери по одной; при статусе
    `[x]` дописывай результат и убирай закрытый пункт из TODO профильного дока.
-3. После правок: `npm run typecheck` → `npm run build` → ручная проверка в
-   демо-режиме (без пульта).
+3. После правок: `npm run typecheck` → `npm test` → `npm run build` → ручная
+   проверка в демо-режиме (без пульта).
 4. Изменения, требующие пульта, помечай как группу B и не «закрывай» вслепую.
 
 ## 8. Релиз и коммиты

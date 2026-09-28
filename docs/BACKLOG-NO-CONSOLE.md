@@ -29,10 +29,11 @@
 
 **База проверки (без пульта):**
 
-- В репозитории **нет автотестов** — `package.json` не содержит test-скрипта,
-  тестовых файлов в `src/` нет.
+- `npm test` — юнит-тесты чистых декодеров (`node:test` + `tsx`), без пульта и
+  Electron. Покрытие ограничено чистыми функциями; UI и wire-логика — вручную.
 - Доступные способы проверки: **демо-режим** (полная симуляция SQ-5,
-  `src/main/demo-meters.ts`), `npm run typecheck`, `npm run build`, ручной UI.
+  `src/main/demo-meters.ts`), `npm run typecheck`, `npm test`, `npm run build`,
+  ручной UI.
 - Всё, что упирается в неизвестный wire-format, без пульта проверить нельзя —
   такие задачи вынесены в группу B.
 
@@ -132,12 +133,11 @@
     успех → баннер скрывается, исчерпание/«Отменить» → экран подключения.
   - Доки: `CONNECT-SCREEN.md` §8/§8.1/§11 обновлены; исходный пункт §11 снят.
 
-- [ ] **CN-02 — Порт хранить per-host**
+- [-] **CN-02 — Порт хранить per-host** — отменено.
   - Источник: `CONNECT-SCREEN.md` §11.
-  - Суть: сейчас порт один общий; хранить его вместе с хостом в
-    `sq_recent_hosts` или отдельным ключом.
-  - Файлы: `src/renderer/core/utils.ts`, `src/renderer/connect/index.ts`.
-  - Проверка: подключиться к разным хостам, перезапуск — порты сохранены.
+  - Причина: отменено по решению — не делаем.
+  - Текущее поведение (порт один общий, по умолчанию `51326`) остаётся как есть
+    и по-прежнему описано в `CONNECT-SCREEN.md` §11.
 
 - [ ] **CN-03 — Выбор локального сетевого интерфейса в UI**
   - Источник: `CONNECT-SCREEN.md` §11.
@@ -159,13 +159,29 @@
 
 ### A.5. Тесты (инфраструктура)
 
-- [ ] **TS-01 — Завести автотесты для чистых декодеров**
+- [x] **TS-01 — Завести автотесты для чистых декодеров**
   - Источник: `SQ-PROTOCOL.md` §8.8 (подсказка про сборку тестовых буферов).
-  - Суть: тестовый фреймворк + тесты чистых функций
-    (`meters.ts`, `routing.ts`, `state.ts`, `stereo-links.ts`,
-    `transport/frame.ts`, `transport/buffer.ts`) на синтетических буферах.
-  - Файлы: `package.json`, новые `*.test.ts`.
-  - Проверка: `npm test` зелёный без пульта.
+  - Результат: подключён встроенный раннер `node:test`, запускаемый через `tsx`
+    (`npm test` → `node --import tsx --test "src/**/*.test.ts"`; добавлен
+    единственный devDependency `tsx`). Тесты лежат рядом с модулями как
+    `*.test.ts` и не попадают в webpack-сборку (явные entry-поинты).
+  - Покрытие (100 тестов): `transport/buffer.ts`, `transport/frame.ts`
+    (`Framer`: split/partial/resync/DSP/0x7F-0xF7), `meters.ts`
+    (`rawToDb`, `meterBody`, `decodeMeterMessage` 0x06/0x17/0x18 + merge,
+    `meterSamplePreview`, `diffMeterBody`, `hotMeterSlots`, `formatMeterChanges`),
+    `stereo-links.ts` (encoding A/B + ловушки), `routing.ts`
+    (`b3ToLabel`/`labelToB3`, input/output/FX/monitor патчи, replace,
+    stereo-фильтр, snapshot/reset), `state.ts` (конвертеры, все регистры
+    `handleDsp`, snapshot/reset). Тестовые UDP-пакеты собираются через
+    `Buffer.concat([header, body])` (§8.8).
+  - Файлы: `package.json`, `src/main/transport/buffer.test.ts`,
+    `src/main/transport/frame.test.ts`, `src/main/meters.test.ts`,
+    `src/main/stereo-links.test.ts`, `src/main/routing.test.ts`,
+    `src/main/state.test.ts`.
+  - Проверка: `npm test` — 100/100 зелёные без пульта; `npm run typecheck` и
+    `npm run build` — зелёные.
+  - Доки: `AGENTS.md` §2/§7 (команда `npm test`, «автотестов нет» → покрытие
+    чистых декодеров) и база проверки в этом файле обновлены.
 
 ---
 
@@ -247,8 +263,8 @@
 | `ROUTING-TAB.md` §13 | RT-01 |
 | `MONITOR-TAB.md` §12–13 | MON-B1…B5, MON-C1 |
 | `LOG-TAB.md` §9, §TODO | LG-01, LG-02, LG-04 закрыты; LG-03 отменён |
-| `CONNECT-SCREEN.md` §11 | CN-01 закрыт; CN-02…CN-03, CN-C1 |
-| `SQ-PROTOCOL.md` §8.8, §10 | TS-01, PR-B1…B5 |
+| `CONNECT-SCREEN.md` §11 | CN-01 закрыт, CN-02 отменён; CN-03, CN-C1 |
+| `SQ-PROTOCOL.md` §8.8, §10 | TS-01 закрыт; PR-B1…B5 |
 
 **Связи с существующим кодом:** `exportFile` — `src/renderer/dashboard/index.ts:112`,
 `src/shared/ipc.ts:179`, `src/main/preload.ts:41`; `syncScrollEnabled` —
