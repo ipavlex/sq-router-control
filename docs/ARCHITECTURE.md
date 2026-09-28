@@ -50,7 +50,7 @@ UDP-метры ──► decodeMeterMessage ──► IPC "sq:meters" ───�
 
 Ключевые особенности:
 - Снапшоты роутинга **троттлятся**: `dirty`-флаг + `setInterval(flush, 120)`
-  (`main.ts:1024-1034`), чтобы бурст кадров не заливал UI.
+  (`main.ts` → `SQController.wireEvents`), чтобы бурст кадров не заливал UI.
 - Поток метров идёт отдельно и не троттлится в main — renderer коалесцирует его
   по кадрам анимации.
 - Логи (`sq:log`) — отдельный канал, см. [`LOG-TAB.md`](LOG-TAB.md).
@@ -96,7 +96,7 @@ src/
 
 ## 3. Сборка и запуск
 
-`package.json` (v1.14.0):
+`package.json` (v1.17.0):
 
 | Команда | Действие |
 |---|---|
@@ -146,7 +146,7 @@ src/
 `electron-builder` (секция `build` в `package.json`): appId
 `com.sqrouter.control`, productName `SQ Router Control`, macOS DMG
 universal, подпись кода отключена (`identity: null`). Окно:
-1180×820, минимум 880×600, фон `#0f1115` (`main.ts:1300-1314`).
+1180×820, минимум 880×600, фон `#0f1115` (`main.ts` → `createWindow`).
 
 ## 4. IPC-мост `window.sq`
 
@@ -188,7 +188,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 
 ## 5. Конвейер данных (main)
 
-`SQController.wireEvents(conn)` (`main.ts:1024-1224`) подписан на события
+`SQController.wireEvents(conn)` (`main.ts`) подписан на события
 `Connection`:
 
 | Событие | Обработка |
@@ -209,7 +209,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 
 ### Начальный дамп
 
-`Connection._parseInitialState` (`connection.ts:534-633`) разбирает ParamData
+`Connection._parseInitialState` (`connection.ts`) разбирает ParamData
 (~97 КБ) и **переизлучает значения синтетическими `dsp`-событиями** в том же
 формате, что и живые кадры. Благодаря этому `MixerState.handleDsp` — единый
 потребитель и для дампа, и для live. Там же декодируются имена каналов,
@@ -274,7 +274,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 | `🎛 REAPER` | Экспорт шаблона треков REAPER (`.RTrackTemplate`) по USB-аутпатчу |
 | `Отключиться` | Разрыв и возврат на экран подключения |
 
-`showView("routing" | "log" | "monitor")` (`utils.ts:196-205`) прячет/показывает
+`showView("routing" | "log" | "monitor")` (`utils.ts`) прячет/показывает
 вью и подсвечивает активную кнопку. Кнопка «Журнал» всегда открывает журнал и
 подсвечивается как активная; подпись не меняется, возврат — кнопками
 `🔊 Роутинг` / `🎧 Монитор` (см. [`LOG-TAB.md`](LOG-TAB.md)).
@@ -350,7 +350,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 
 ## 11. Демо-режим
 
-`SQController.startDemo()` (`main.ts:642-690`) поднимает полностью
+`SQController.startDemo()` (`main.ts`) поднимает полностью
 симулированный SQ-5 (FW 1.9.4) без сети:
 
 - модель и `MixerState` наполняются правдоподобным шоу (`seedDemoMixerState`);
@@ -367,7 +367,8 @@ universal, подпись кода отключена (`identity: null`). Окн
 ## 12. Определение активной сцены
 
 В бинарном протоколе SQ **нет запроса активной сцены**, поэтому имя определяется
-косвенно (`main.ts:301-306,1041-1056`, `connection.ts:461-510`):
+косвенно (`main.ts` → `SQController.wireEvents`, `currentSceneName`;
+`connection.ts` → `_parseChannelInfo`):
 
 1. `sceneNames` — библиотека `sceneId → имя` из списка сцен (sub=0x08).
 2. `currentSceneId` — последняя наблюдённая сцена:
@@ -420,12 +421,12 @@ Mix-шин — 12, DCA — 8. `modelSpec()` определяет, какие и�
 
 - **Журнал** — основной пользовательский инструмент (см. `LOG-TAB.md`).
 - **Renderer**: глобальный обработчик ошибок пишет стек в консоль
-  (`renderer/index.ts:11-14`).
+  (`renderer/index.ts`, обработчик `window` `error`).
 - **Main**: `uncaughtException` / `unhandledRejection` логируются
-  (`main.ts:1330-1335`), падение renderer-процесса — событие
+  (`main.ts`, `uncaughtException` / `unhandledRejection`), падение renderer-процесса — событие
   `render-process-gone`.
 - **Одноэкземплярность**: single-instance lock; повторный запуск фокусирует
-  существующее окно (`main.ts:1386-1395`).
+  существующее окно (`main.ts`, `requestSingleInstanceLock`).
 - **Дампы**: `paramdata-dump.bin` и meter-пакеты в `<userData>/diagnostics`
   (раздел 10).
 - **Метро-инвентарь**: `meterPacketInfo` логирует формы пакетов и изменения

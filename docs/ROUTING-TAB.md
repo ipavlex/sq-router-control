@@ -329,6 +329,11 @@ F7 0B 0B 0D [ch] [modifier] [valLo] [valHi]
 |---|---|
 | `0x00`–`0x2F` | Input 1–48 |
 
+> Вкладка «Роутинг» адресует только входные каналы (`destB3`). Коды назначения
+> выходов (`0x1A`/`0x1C`/`0x1D`/`0x1E`; `0x1B` ME в UI не используется) —
+> в [`SQ-PROTOCOL.md`](SQ-PROTOCOL.md) §4.2 и
+> [`MONITOR-TAB.md`](MONITOR-TAB.md) §10.
+
 ### Поток метров (`MetersPayload`)
 
 | Поле | Источник | Применение |

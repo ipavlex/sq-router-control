@@ -52,7 +52,7 @@
 - [x] **RT-01 — Синхронизация прокрутки включена по умолчанию**
   - Источник: `ROUTING-TAB.md` §13 (пункт удалён).
   - Суть: `syncScrollEnabled` инициализируется `true`
-    (`src/renderer/tabs/routing/index.ts:1179`).
+    (`src/renderer/tabs/routing/index.ts` → `syncScrollEnabled`).
   - Файлы: `src/renderer/tabs/routing/index.ts`,
     `src/renderer/tabs/routing/view.html` (кнопка сразу `.active`,
     `aria-pressed="true"`).
@@ -245,24 +245,31 @@
 
 - [x] **DOC-01 — Кнопка журнала: устранить противоречие**
   - Проблема: `ARCHITECTURE.md` §8 утверждал, что текст меняется на «← Назад»;
-    `LOG-TAB.md` §2 и код (`src/renderer/dashboard/view.html:17`) — что подпись
-    всегда `📋 Журнал`.
+    `LOG-TAB.md` §2 и код (`src/renderer/dashboard/view.html` → `#log-btn`) — что
+    подпись всегда `📋 Журнал`.
   - Результат: `ARCHITECTURE.md` §8 исправлен — подпись не меняется, возврат
     кнопками `🔊 Роутинг` / `🎧 Монитор`. Сделано вместе с LG-01.
 
-- [ ] **DOC-02 — Версия приложения**
-  - Docs указывают `v1.14.0` (`ARCHITECTURE.md` §3), в `package.json` — `1.16.0`.
-  - Действие: синхронизировать.
+- [x] **DOC-02 — Версия приложения**
+  - Проблема: `ARCHITECTURE.md` §3 указывал `v1.14.0`, в `package.json` — уже
+    `1.17.0`.
+  - Результат: `ARCHITECTURE.md` §3 синхронизирован — `v1.17.0`.
 
-- [ ] **DOC-03 — Ссылки на строки кода**
-  - Ссылки вида `main.ts:1024-1034`, `connection.ts:534-633` вероятно устарели.
-  - Действие: перепроверить и обновить/убрать (либо перейти на ссылки по
-    символам, а не по строкам).
+- [x] **DOC-03 — Ссылки на строки кода**
+  - Проблема: ссылки вида `main.ts:1024-1034`, `connection.ts:534-633` устарели
+    (например, `wireEvents` переехал на 1282, `startDemo` — на 895).
+  - Результат: все адреса по номерам строк заменены на **ссылки по символам**
+    (`файл` → `символ`) в `ARCHITECTURE.md`, `CONNECT-SCREEN.md`, `LOG-TAB.md`
+    и в этом бэклоге. Номера строк больше не поддерживаются.
 
-- [ ] **DOC-04 — Синхронизация кодов источников/назначений в UI-доках**
-  - `SQ-PROTOCOL.md` §4.2 содержит `0x1B` ME (Mon), которого нет в UI-доках
-    (`ROUTING-TAB.md` §10, `MONITOR-TAB.md` §10).
-  - Действие: отметить как «в UI не используется» или добавить.
+- [x] **DOC-04 — Синхронизация кодов источников/назначений в UI-доках**
+  - Проблема: `SQ-PROTOCOL.md` §4.2 содержит `0x1B` ME (Mon), которого нет в
+    UI-доках (`ROUTING-TAB.md` §10, `MONITOR-TAB.md` §10).
+  - Результат: выбран вариант «в UI не используется» (код не поддержан
+    селекторами — `LOCK_TAB_DESTS`/`buildOutputOptions` в
+    `monitor/index.ts` дают только `0x1a/0x1c/0x1d/0x1e`). Пометка добавлена в
+    `SQ-PROTOCOL.md` §4.2, `MONITOR-TAB.md` §3 и §10 (новый подраздел «Типы
+    выходов (destType)»), `ROUTING-TAB.md` §10.
 
 - [ ] **DOC-05 — Снятие закрытых пунктов из TODO профильных доков**
   - После выполнения пунктов группы A убирать/помечать их в
@@ -281,7 +288,8 @@
 | `CONNECT-SCREEN.md` §11 | CN-01 закрыт, CN-02 отменён, CN-C1 закрыт; CN-03 |
 | `SQ-PROTOCOL.md` §8.8, §10 | TS-01 закрыт; PR-B1…B5 |
 
-**Связи с существующим кодом:** `exportFile` — `src/renderer/dashboard/index.ts:112`,
-`src/shared/ipc.ts:179`, `src/main/preload.ts:41`; `syncScrollEnabled` —
-`src/renderer/tabs/routing/index.ts:1179`; кнопка журнала —
-`src/renderer/dashboard/view.html:17`.
+**Связи с существующим кодом:** `exportFile` — `src/renderer/dashboard/index.ts`
+(`exportReaperTemplate`), `src/shared/ipc.ts` (`SqApi.exportFile`),
+`src/main/preload.ts` (`exportFile`); `syncScrollEnabled` —
+`src/renderer/tabs/routing/index.ts`; кнопка журнала —
+`src/renderer/dashboard/view.html` (`#log-btn`).

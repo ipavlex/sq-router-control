@@ -65,8 +65,9 @@
 - `type="text"`, `inputmode="decimal"`, `placeholder="192.168.1.60"`,
   `autocomplete="off"`, `spellcheck="false"`.
 - При старте приложения, если есть история, в поле подставляется первый
-  недавний хост, и поле получает фокус (`src/renderer/index.ts:16-20`).
-- Enter в поле запускает подключение (`connect/index.ts:88-90`).
+  недавний хост, и поле получает фокус (`src/renderer/index.ts`, точка входа).
+- Enter в поле запускает подключение (`connect/index.ts` → `keydown` на
+  `#ip-input`).
 
 ### Порт (`#port-input`)
 
@@ -74,21 +75,23 @@
   `title="TCP port (default 51326)"`.
 - При подключении пустое/некорректное значение превращается в `undefined` —
   main-процесс подставляет порт по умолчанию `51326`
-  (`connect/index.ts:35`, `connection.ts:51,127`).
-- Enter в поле также запускает подключение (`connect/index.ts:91-93`).
+  (`connect/index.ts` → `doConnect`, парсинг порта; `connection.ts` →
+  `SQ_TCP_PORT`, конструктор `Connection`).
+- Enter в поле также запускает подключение (`connect/index.ts` → `keydown` на
+  `#port-input`).
 
 ## 4. Поток подключения
 
-`doConnect()` (`src/renderer/connect/index.ts:33-61`):
+`doConnect()` (`src/renderer/connect/index.ts`):
 
 1. Читает и `trim()`-ит хост, парсит порт.
-2. **Валидация** `isValidHost(host)` (`utils.ts:92-100`): допускается либо
+2. **Валидация** `isValidHost(host)` (`utils.ts`): допускается либо
    корректный IPv4 (каждый октет 0–255), либо hostname
    (`[a-zA-Z0-9-]+` с точками). При ошибке — сообщение
    «Введите корректный IP-адрес или имя хоста.» и фокус на поле; подключение
    не начинается.
 3. `setLoading(true)` — кнопка «Подключиться» блокируется, добавляется спиннер,
-   подпись меняется на «Подключение…» (`utils.ts:113-127`).
+   подпись меняется на «Подключение…» (`utils.ts` → `setLoading`).
 4. `window.sq.connect(host, port)` → IPC `sq:connect` → `SQController.connect`.
 5. При успехе:
    - `state.isDemoMode = false`;
@@ -100,7 +103,8 @@
 
 ### Сообщения об ошибках подключения
 
-Тексты формируются в main-процессе (`main.ts:257-266`) и `connection.ts`:
+Тексты формируются в main-процессе (`main.ts` → `SQController.connect`) и
+`connection.ts`:
 
 | Ситуация | Текст |
 |---|---|
@@ -152,7 +156,7 @@ Error/edge cases: нет активных подсетей → «Активны�
 
 ## 5. Поток демо-режима
 
-`doStartDemo()` (`src/renderer/connect/index.ts:12-31`):
+`doStartDemo()` (`src/renderer/connect/index.ts`):
 
 1. Защита от повторного запуска: флаг `demoStarting` + `demoBtn.disabled`.
 2. `setMessage("", "")` — очистка предыдущей ошибки.
@@ -168,10 +172,11 @@ Error/edge cases: нет активных подсетей → «Активны�
 
 ## 6. Недавние хосты
 
-- Хранилище — `localStorage` под ключом `sq_recent_hosts` (`utils.ts:90`).
-- `addRecent(host)` (`utils.ts:137-142`): хост переносится в начало списка,
+- Хранилище — `localStorage` под ключом `sq_recent_hosts`
+  (`utils.ts` → `RECENT_KEY`).
+- `addRecent(host)` (`utils.ts`): хост переносится в начало списка,
   дубликаты удаляются, хранится максимум **6** записей.
-- `renderRecent()` (`utils.ts:144-162`): рисует чипы; клик по чипу подставляет
+- `renderRecent()` (`utils.ts`): рисует чипы; клик по чипу подставляет
   хост в `#ip-input` и ставит фокус (подключение не запускается автоматически).
 - Если история пуста, `#recent-row` скрыт.
 - Хост добавляется только при **успешном** реальном подключении; демо-режим
@@ -180,7 +185,8 @@ Error/edge cases: нет активных подсетей → «Активны�
 ## 7. Рукопожатие с пультом
 
 Полная последовательность кадров описана в
-[`SQ-PROTOCOL.md`](SQ-PROTOCOL.md); кратко (`connection.ts:1-18`):
+[`SQ-PROTOCOL.md`](SQ-PROTOCOL.md); кратко (`connection.ts` → `Connection.connect`,
+`_openTcp`):
 
 1. UDP-сокет биндится на случайный локальный порт — приложению нужен канал
    для потока уровней.
@@ -189,7 +195,7 @@ Error/edge cases: нет активных подсетей → «Активны�
    negotiation → subscribe-all → дополнительные подписки → flood параметров.
 4. Keepalive `sub=0x03` каждые ~1000 мс (`KEEPALIVE_INTERVAL_MS`).
 5. Общий таймаут рукопожатия — **10 000 мс**
-   (`connectTimeoutMs`, `connection.ts:129,181-184`).
+   (`connectTimeoutMs`; `connection.ts` → конструктор `Connection`, `_openTcp`).
 
 Успешное рукопожатие резолвит `VersionInfo` (модель, `fwA`, `fwB`, `build`) —
 именно эти данные показываются в шапке дашборда, а `modelSpec(model)`
@@ -242,7 +248,7 @@ Error/edge cases: нет активных подсетей → «Активны�
 | Ручное отключение | видим | скрыт |
 | Неожиданный разрыв | видим (+ сообщение) | скрыт |
 
-Переключение выполняет `showScreen()` (`utils.ts:164-167`).
+Переключение выполняет `showScreen()` (`utils.ts`).
 
 ## 10. Ключевые файлы
 
