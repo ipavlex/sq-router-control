@@ -39,6 +39,20 @@ interface DemoVariant {
 const Src = { Local: 0x01, SLink: 0x02, USB: 0x03 };
 const Dest = { Local: 0x1a, USB: 0x1d, SLink: 0x1c };
 
+/**
+ * Auto-reconnect tuning for unexpected connection drops. Retries use an
+ * exponential backoff (1s, 2s, 4s … capped at 30s) and give up after
+ * RECONNECT_MAX_ATTEMPTS so the user can retry manually from the connect
+ * screen. The renderer shows progress and offers a cancel button.
+ */
+const RECONNECT_MAX_ATTEMPTS = 8;
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+
+function reconnectDelay(attempt: number): number {
+  return Math.min(RECONNECT_BASE_DELAY_MS * 2 ** (attempt - 1), RECONNECT_MAX_DELAY_MS);
+}
+
 /** Space-separated lowercase hex — the log's "raw" view of a frame. */
 function hexDump(buf: Buffer): string {
   return Array.from(buf)
@@ -208,7 +222,17 @@ class SQController {
   /** Live channel state (fader/mute/gain/…) fed by DSP frames + ParamData. */
   private mixer = new MixerState();
   private host = "";
+  private port: number | undefined;
+  private localInterface = "";
   private statusTimer: NodeJS.Timeout | null = null;
+
+  /** Auto-reconnect after an unexpected drop (only for established sessions). */
+  private autoReconnect = false;
+  /** 1-based retry counter of the active reconnect sequence (0 = idle). */
+  private reconnectAttempt = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  /** Invalidates pending reconnect callbacks after cancel / manual reconnect. */
+  private reconnectGen = 0;
 
   // Demo mode state
   private demoMode = false;
@@ -242,17 +266,20 @@ class SQController {
     | { ok: true; version: VersionInfo; spec: SQModelSpec }
     | { ok: false; error: string }
   > {
+    // A manual connect supersedes any automatic reconnect sequence.
+    this.stopReconnect();
     // Tear down any previous session.
-    this.disconnect();
+    this.teardown();
 
     const trimmed = (host || "").trim();
     if (!trimmed) return Promise.resolve({ ok: false, error: "Empty host" });
 
     this.host = trimmed;
+    this.port = port;
     this.model.reset();
     this.mixer.reset();
     this.resetSceneState();
-    const conn = new Connection({ host: trimmed, port });
+    const conn = new Connection({ host: trimmed, port, localInterface: this.localInterface || undefined });
     this.conn = conn;
 
     this.wireEvents(conn);
@@ -267,6 +294,9 @@ class SQController {
         spec: modelSpec(version.model),
       }))
       .catch((err: NodeJS.ErrnoException) => {
+        // A failed initial connect never triggers auto-reconnect: the error is
+        // surfaced on the connect screen so the user can fix host/port.
+        conn.disconnect();
         const msg =
           err && err.code === "ECONNREFUSED"
             ? `Connection refused by ${trimmed}:51326. Is the mixer online and MixPad disabled?`
@@ -298,7 +328,8 @@ class SQController {
     }
   }
 
-  disconnect(): void {
+  /** Tear down the live connection and its flush timer (keeps reconnect flags). */
+  private teardown(): void {
     this.stopDemo();
     if (this.statusTimer) {
       clearInterval(this.statusTimer);
@@ -308,6 +339,135 @@ class SQController {
       this.conn.disconnect();
       this.conn = null;
     }
+  }
+
+  disconnect(): void {
+    // Manual disconnect: no auto-retry.
+    this.stopReconnect();
+    this.teardown();
+  }
+
+  // ── auto-reconnect ────────────────────────────────────────────────
+
+  /** Stop and invalidate any pending reconnect sequence (no status emitted). */
+  private stopReconnect(): void {
+    this.reconnectGen++;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.autoReconnect = false;
+    this.reconnectAttempt = 0;
+  }
+
+  /**
+   * User-initiated cancel of the reconnect sequence (renderer button). Tears
+   * the dead connection down and returns the UI to the connect screen.
+   */
+  cancelReconnect(): void {
+    const wasActive = this.autoReconnect && (this.reconnectAttempt > 0 || this.reconnectTimer !== null);
+    this.stopReconnect();
+    this.teardown();
+    if (wasActive) {
+      this.send("sq:status", {
+        connected: false,
+        host: this.host,
+        reconnect: {
+          active: false,
+          attempt: 0,
+          maxAttempts: RECONNECT_MAX_ATTEMPTS,
+          delayMs: 0,
+          error: "Переподключение отменено.",
+        },
+      });
+      this.send("sq:log", { level: "warn", msg: "Auto-reconnect cancelled by user." });
+    }
+  }
+
+  /** Schedule the next reconnect attempt with exponential backoff. */
+  private scheduleReconnect(): void {
+    this.reconnectAttempt++;
+    const attempt = this.reconnectAttempt;
+
+    if (attempt > RECONNECT_MAX_ATTEMPTS) {
+      this.autoReconnect = false;
+      this.reconnectAttempt = 0;
+      const error = `Не удалось переподключиться к ${this.host}.`;
+      this.send("sq:status", {
+        connected: false,
+        host: this.host,
+        reconnect: {
+          active: false,
+          attempt: RECONNECT_MAX_ATTEMPTS,
+          maxAttempts: RECONNECT_MAX_ATTEMPTS,
+          delayMs: 0,
+          error,
+        },
+      });
+      this.send("sq:log", {
+        level: "error",
+        msg: `Auto-reconnect gave up after ${RECONNECT_MAX_ATTEMPTS} attempts.`,
+      });
+      return;
+    }
+
+    const delayMs = reconnectDelay(attempt);
+    this.send("sq:status", {
+      connected: false,
+      host: this.host,
+      reconnect: { active: true, attempt, maxAttempts: RECONNECT_MAX_ATTEMPTS, delayMs },
+    });
+    this.send("sq:log", {
+      level: "warn",
+      msg: `Reconnect attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS} in ${Math.round(delayMs / 1000)}s…`,
+    });
+
+    const gen = this.reconnectGen;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (gen !== this.reconnectGen) return;
+      this.attemptReconnect(gen);
+    }, delayMs);
+    this.reconnectTimer.unref();
+  }
+
+  /** Run one reconnect attempt against the remembered host/port. */
+  private attemptReconnect(gen: number): void {
+    const attempt = this.reconnectAttempt;
+    // Tell the UI an attempt is now in flight (no countdown).
+    this.send("sq:status", {
+      connected: false,
+      host: this.host,
+      reconnect: { active: true, attempt, maxAttempts: RECONNECT_MAX_ATTEMPTS, delayMs: 0 },
+    });
+
+    this.model.reset();
+    this.mixer.reset();
+    this.resetSceneState();
+    const conn = new Connection({
+      host: this.host,
+      port: this.port,
+      localInterface: this.localInterface || undefined,
+    });
+    this.conn = conn;
+    this.wireEvents(conn);
+
+    conn
+      .connect()
+      .then(() => {
+        // Success is announced by the connection's own "connect" handler. If the
+        // attempt was superseded in the meantime, drop the now-stale socket.
+        if (this.conn !== conn) conn.disconnect();
+      })
+      .catch((err: NodeJS.ErrnoException) => {
+        if (gen !== this.reconnectGen) return;
+        conn.disconnect();
+        this.send("sq:log", {
+          level: "warn",
+          msg: `Reconnect attempt ${attempt} failed: ${(err && err.message) || err}`,
+        });
+        if (this.autoReconnect) this.scheduleReconnect();
+      });
   }
 
   /** Current scene name, or null when no scene recall has been observed. */
@@ -660,7 +820,9 @@ class SQController {
    */
   startDemo(): { ok: true; version: VersionInfo; spec: SQModelSpec } | { ok: false; error: string } {
     try {
-      this.stopDemo();
+      // Demo replaces any live session / reconnect sequence.
+      this.stopReconnect();
+      this.teardown();
 
       this.demoMode = true;
       this.host = "demo (simulated SQ-5)";
@@ -1045,6 +1207,8 @@ class SQController {
 
   private wireEvents(conn: Connection): void {
     let dirty = false;
+    /** True once the handshake completed for this connection. */
+    let established = false;
     const flush = (): void => {
       if (dirty) {
         dirty = false;
@@ -1052,6 +1216,8 @@ class SQController {
       }
     };
     // Throttle routing snapshots so a burst of frames doesn't flood the UI.
+    // Any previous flush timer (dropped / replaced connection) is discarded.
+    if (this.statusTimer) clearInterval(this.statusTimer);
     this.statusTimer = setInterval(flush, 120);
     this.statusTimer.unref();
 
@@ -1182,23 +1348,39 @@ class SQController {
     });
 
     conn.on("connect", (v: VersionInfo) => {
+      established = true;
+      // A restored session: remember the attempt count for the UI before reset.
+      const reconnected = this.reconnectAttempt > 0;
+      // Reset the reconnect bookkeeping and arm auto-reconnect for future drops.
+      this.stopReconnect();
+      this.autoReconnect = true;
       this.send("sq:status", {
         connected: true,
         host: this.host,
         version: v,
         spec: modelSpec(v.model),
+        reconnected,
       });
       this.send("sq:log", {
         level: "ok",
-        msg: `Connected to ${v.modelName} (FW ${v.fwA}.${v.fwB}${
+        msg: `${reconnected ? "Reconnected to" : "Connected to"} ${v.modelName} (FW ${v.fwA}.${v.fwB}${
           v.build !== undefined ? "." + v.build : ""
         }) at ${this.host}`,
       });
     });
 
     conn.on("disconnect", () => {
-      this.send("sq:status", { connected: false, host: this.host });
       this.send("sq:log", { level: "warn", msg: "Disconnected from mixer." });
+      // Stale connection being replaced/torn down — ignore.
+      if (this.conn !== conn) return;
+      // A handshake that never completed is handled by the connect() callback;
+      // don't emit a drop status that would dismiss the reconnect UI.
+      if (!established) return;
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      } else {
+        this.send("sq:status", { connected: false, host: this.host });
+      }
     });
 
     // Live input meters streamed over UDP (~25-50 packets/s). The renderer
@@ -1364,6 +1546,10 @@ function registerIpc(): void {
   );
   ipcMain.handle("sq:disconnect", () => {
     controller.disconnect();
+    return true;
+  });
+  ipcMain.handle("sq:cancelReconnect", () => {
+    controller.cancelReconnect();
     return true;
   });
   ipcMain.handle("sq:getSnapshot", () => controller.snapshot());

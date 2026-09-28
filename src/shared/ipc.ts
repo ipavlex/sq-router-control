@@ -106,11 +106,32 @@ export interface SnapshotPayload {
   channels?: ChannelStateSnapshot[];
 }
 
+/**
+ * Progress of an automatic reconnect sequence, reported to the renderer while
+ * an unexpected connection drop is being retried with backoff.
+ */
+export interface ReconnectInfo {
+  /** True while a retry is scheduled or an attempt is in flight. */
+  active: boolean;
+  /** 1-based index of the attempt about to run / currently running. */
+  attempt: number;
+  /** Number of attempts before the sequence gives up. */
+  maxAttempts: number;
+  /** Milliseconds until the next attempt; 0 while an attempt is in flight. */
+  delayMs: number;
+  /** Human-readable reason: last failure, or why the sequence stopped. */
+  error?: string;
+}
+
 export interface StatusPayload {
   connected: boolean;
   host?: string;
   version?: VersionInfo;
   spec?: ModelSpec;
+  /** True when this connection was restored automatically after a drop. */
+  reconnected?: boolean;
+  /** Present while an automatic reconnect sequence is active or just ended. */
+  reconnect?: ReconnectInfo;
 }
 
 export interface MetersPayload {
@@ -163,6 +184,8 @@ export interface LogPayload {
 export interface SqApi {
   connect(host: string, port?: number): Promise<ConnectResult>;
   disconnect(): Promise<boolean>;
+  /** Abort an in-progress automatic reconnect sequence. */
+  cancelReconnect(): Promise<boolean>;
   getSnapshot(): Promise<SnapshotPayload>;
   demoRefresh(): Promise<SnapshotPayload>;
   setMonitorOutput(side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;

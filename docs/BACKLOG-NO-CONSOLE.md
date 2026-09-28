@@ -112,12 +112,25 @@
 
 ### A.3. Экран подключения
 
-- [ ] **CN-01 — Авто-переподключение при разрыве**
+- [x] **CN-01 — Авто-переподключение при разрыве**
   - Источник: `CONNECT-SCREEN.md` §11.
   - Суть: повторные попытки с backoff, UI-индикация.
-  - Файлы: `src/renderer/connect/index.ts`, `src/renderer/dashboard/index.ts`,
-    `src/main/main.ts`.
-  - Проверка: логика воспроизводима на тестовом TCP-сервере без пульта.
+  - Результат: авто-переподключение реализовано в main-процессе
+    (`SQController.scheduleReconnect/attemptReconnect/cancelReconnect`):
+    backoff `1→2→4→8→16→30с`, до **8** попыток, те же host/port. В
+    `StatusPayload` добавлены `reconnect` (`ReconnectInfo`) и `reconnected`;
+    новый IPC `sq:cancelReconnect`. Renderer показывает баннер
+    `#reconnect-banner` с живым отсчётом и кнопкой «Отменить», остаётся на
+    дашборде во время ретраев, при сдаче — экран подключения с причиной.
+    Ручное подключение/демо/«Отключиться» отменяют серию.
+  - Файлы: `src/shared/ipc.ts`, `src/main/preload.ts`, `src/main/main.ts`,
+    `src/renderer/dashboard/index.ts` (+`view.html`),
+    `src/renderer/connect/index.ts`, `src/renderer/core/{types,utils}.ts`,
+    `src/renderer/assets/styles.css`.
+  - Проверка: `npm run typecheck` и `npm run build` — зелёные. Логика воспроизводима
+    на тестовом TCP-сервере: обрыв established-сокета → серия ретраев с backoff,
+    успех → баннер скрывается, исчерпание/«Отменить» → экран подключения.
+  - Доки: `CONNECT-SCREEN.md` §8/§8.1/§11 обновлены; исходный пункт §11 снят.
 
 - [ ] **CN-02 — Порт хранить per-host**
   - Источник: `CONNECT-SCREEN.md` §11.
@@ -234,7 +247,7 @@
 | `ROUTING-TAB.md` §13 | RT-01 |
 | `MONITOR-TAB.md` §12–13 | MON-B1…B5, MON-C1 |
 | `LOG-TAB.md` §9, §TODO | LG-01, LG-02, LG-04 закрыты; LG-03 отменён |
-| `CONNECT-SCREEN.md` §11 | CN-01…CN-03, CN-C1 |
+| `CONNECT-SCREEN.md` §11 | CN-01 закрыт; CN-02…CN-03, CN-C1 |
 | `SQ-PROTOCOL.md` §8.8, §10 | TS-01, PR-B1…B5 |
 
 **Связи с существующим кодом:** `exportFile` — `src/renderer/dashboard/index.ts:112`,

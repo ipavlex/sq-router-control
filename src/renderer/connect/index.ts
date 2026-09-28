@@ -5,7 +5,7 @@
 import { elementRefs, state, addRecent, isValidHost, setLoading, setMessage, showScreen, updateSceneHint } from "../core/utils";
 import { renderInputs, syncEditInputs } from "../tabs/routing";
 import { updateStat } from "../tabs/log";
-import { enterDashboard } from "../dashboard";
+import { enterDashboard, dismissReconnectUi } from "../dashboard";
 
 let demoStarting = false;
 
@@ -62,6 +62,7 @@ export async function doConnect(): Promise<void> {
 
 export async function doDisconnect(): Promise<void> {
   await window.sq.disconnect();
+  dismissReconnectUi();
   setMessage("", "");
   elementRefs.ip.value = "";
   showScreen("connect");

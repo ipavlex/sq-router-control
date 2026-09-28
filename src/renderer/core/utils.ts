@@ -77,6 +77,10 @@ export const elementRefs: ElementRefs = {
   syncScrollBtn: $("#sync-scroll-btn"),
   editTableWrap: $("#edit-table-wrap"),
   activeTableWrap: $("#active-table-wrap"),
+  reconnectBanner: $("#reconnect-banner"),
+  reconnectText: $("#reconnect-text"),
+  reconnectCancel: $("#reconnect-cancel"),
+  connDot: $("#conn-dot"),
 };
 
 /** Cross-tab state shared by all renderer modules. */

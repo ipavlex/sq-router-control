@@ -9,13 +9,14 @@ import * as routing from "../tabs/routing";
 import * as monitor from "../tabs/monitor";
 import * as log from "../tabs/log";
 import { buildReaperTracks, buildReaperTrackTemplate } from "../../shared/reaper-template";
-import type { LogPayload, ModelSpec, SnapshotPayload, StatusPayload, VersionInfo } from "../../shared/ipc";
+import type { LogPayload, ModelSpec, ReconnectInfo, SnapshotPayload, StatusPayload, VersionInfo } from "../../shared/ipc";
 
 export function enterDashboard(
   version: VersionInfo | undefined,
   spec: ModelSpec | null,
   host: string
 ): void {
+  dismissReconnectUi();
   setLoading(false);
   showScreen("dash");
   const v = version;
@@ -36,18 +37,94 @@ export function enterDashboard(
 
 // ── console event stream ────────────────────────────────────────────
 
+// ── auto-reconnect indicator ───────────────────────────────────────
+
+/** Live countdown to the next reconnect attempt (null when idle). */
+let reconnectTicker: number | null = null;
+
+function stopReconnectTicker(): void {
+  if (reconnectTicker !== null) {
+    clearInterval(reconnectTicker);
+    reconnectTicker = null;
+  }
+}
+
+function hideReconnectBar(): void {
+  stopReconnectTicker();
+  elementRefs.reconnectBanner.hidden = true;
+  elementRefs.connDot.classList.remove("reconnecting");
+  elementRefs.connDot.classList.add("live");
+}
+
+/** Clear the reconnect indicator (used when leaving the dashboard). */
+export function dismissReconnectUi(): void {
+  hideReconnectBar();
+}
+
+/** Show retry progress over the dashboard, with a live countdown. */
+function showReconnectBar(info: ReconnectInfo): void {
+  stopReconnectTicker();
+  elementRefs.reconnectBanner.hidden = false;
+  elementRefs.connDot.classList.remove("live");
+  elementRefs.connDot.classList.add("reconnecting");
+  const total = info.maxAttempts;
+  const attempt = Math.min(info.attempt, total);
+  let remaining = Math.max(0, Math.ceil(info.delayMs / 1000));
+  const render = (): void => {
+    const head = `Соединение с пультом потеряно. Переподключение… ${attempt}/${total}`;
+    elementRefs.reconnectText.textContent =
+      remaining > 0 ? `${head} · через ${remaining} с` : `${head} · подключение…`;
+  };
+  render();
+  if (remaining > 0) {
+    reconnectTicker = window.setInterval(() => {
+      remaining--;
+      render();
+      if (remaining <= 0) stopReconnectTicker();
+    }, 1000);
+  }
+}
+
+elementRefs.reconnectCancel.addEventListener("click", () => {
+  elementRefs.reconnectCancel.disabled = true;
+  window.sq.cancelReconnect().finally(() => {
+    elementRefs.reconnectCancel.disabled = false;
+  });
+});
+
 window.sq.onStatus((p: StatusPayload) => {
   // Keep model spec in sync in case it arrives via a status update.
   if (p.spec) state.modelSpec = p.spec;
-  if (!p.connected) {
-    routing.clearMeters();
-    monitor.clearMeters();
-    // unexpected drop
-    if (!elementRefs.dashScreen.hidden) {
-      showScreen("connect");
-      state.modelSpec = null;
-      setMessage("Соединение с пультом разорвано.", "error");
+
+  if (p.connected) {
+    // Connected (fresh or restored) — drop any reconnect indicator.
+    hideReconnectBar();
+    if (p.reconnected) {
+      // The console re-floods its state; clear stale meters until it arrives.
+      routing.clearMeters();
+      monitor.clearMeters();
+      setMessage("", "");
     }
+    return;
+  }
+
+  routing.clearMeters();
+  monitor.clearMeters();
+
+  if (p.reconnect?.active) {
+    // Unexpected drop with auto-reconnect running: stay on the dashboard and
+    // show retry progress instead of bouncing back to the connect screen.
+    if (!elementRefs.dashScreen.hidden) showReconnectBar(p.reconnect);
+    return;
+  }
+
+  // No reconnect pending (gave up, cancelled, or plain drop) — return to the
+  // connect screen with the reason.
+  hideReconnectBar();
+  if (!elementRefs.dashScreen.hidden) {
+    showScreen("connect");
+    state.modelSpec = null;
+    setMessage(p.reconnect?.error || "Соединение с пультом разорвано.", "error");
   }
 });
 

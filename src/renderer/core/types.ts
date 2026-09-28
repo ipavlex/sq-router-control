@@ -80,6 +80,10 @@ export interface ElementRefs {
   syncScrollBtn: HTMLButtonElement;
   editTableWrap: HTMLElement;
   activeTableWrap: HTMLElement;
+  reconnectBanner: HTMLElement;
+  reconnectText: HTMLElement;
+  reconnectCancel: HTMLButtonElement;
+  connDot: HTMLElement;
 }
 
 /** Cross-tab state shared by all renderer modules. */
@@ -111,4 +115,5 @@ export type {
   LogLevel,
   VersionInfo,
   ConnectResult,
+  ReconnectInfo,
 } from "../../shared/ipc";

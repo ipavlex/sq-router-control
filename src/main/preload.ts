@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("sq", {
   connect: (host: string, port?: number): Promise<ConnectResult> =>
     ipcRenderer.invoke("sq:connect", host, port),
   disconnect: (): Promise<boolean> => ipcRenderer.invoke("sq:disconnect"),
+  cancelReconnect: (): Promise<boolean> => ipcRenderer.invoke("sq:cancelReconnect"),
   getSnapshot: (): Promise<SnapshotPayload> => ipcRenderer.invoke("sq:getSnapshot"),
   demoRefresh: (): Promise<SnapshotPayload> => ipcRenderer.invoke("sq:demoRefresh"),
   setMonitorOutput: (side: "L" | "R", destType: number, destChannel: number): Promise<boolean> =>
