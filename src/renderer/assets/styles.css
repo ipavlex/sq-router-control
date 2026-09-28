@@ -1011,6 +1011,12 @@ h2.stereo-diff:hover::after {
   white-space: pre-wrap;
 }
 
+/* "Сырой hex" mode — render raw frame bytes in a monospace face. */
+.log.raw-mode .msg {
+  color: var(--text);
+  font-family: var(--mono);
+}
+
 /* Experiment mark separator (button / M key) */
 .log .line.mark {
   background: rgba(56, 132, 255, 0.12);

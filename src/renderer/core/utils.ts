@@ -49,6 +49,8 @@ export const elementRefs: ElementRefs = {
   log: $("#log"),
   clearLog: $("#clear-log"),
   markLog: $("#mark-log"),
+  saveLog: $("#save-log"),
+  logRawToggle: $("#log-raw-toggle"),
   saveRoutingBtn: $("#save-routing-btn"),
   exportReaperBtn: $("#export-reaper-btn"),
   topbarScene: $("#topbar-scene"),

@@ -39,6 +39,13 @@ interface DemoVariant {
 const Src = { Local: 0x01, SLink: 0x02, USB: 0x03 };
 const Dest = { Local: 0x1a, USB: 0x1d, SLink: 0x1c };
 
+/** Space-separated lowercase hex — the log's "raw" view of a frame. */
+function hexDump(buf: Buffer): string {
+  return Array.from(buf)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join(" ");
+}
+
 const DEMO_VARIANTS: DemoVariant[] = [
   {
     names: {
@@ -340,10 +347,11 @@ class SQController {
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
     // Monitor output patch: source 0x00 = PAFL L, 0x01 = PAFL R (modifier 0x11).
-    this.sendPatchFrame(side === "L" ? 0x00 : 0x01, 0x11, ch0 & 0xff, destType & 0xff);
+    const frame = this.sendPatchFrame(side === "L" ? 0x00 : 0x01, 0x11, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
       msg: `Monitor ${srcLabel} → ${destName} Out ${destChannel}`,
+      raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
@@ -361,20 +369,21 @@ class SQController {
       b3 >= 0x58 && b3 <= 0x63 ? `Mix ${b3 - 0x58 + 1}` :
       `b3 0x${b3.toString(16)}`;
 
+    const val = on ? 0x0001 : 0x0000;
+    const frame = Buffer.from([0xf7, 0x08, 0x15, 0x0c, b3, 0x00, val & 0xff, (val >> 8) & 0xff]);
+    const entry = {
+      level: "dsp" as const,
+      msg: `PAFL ${label}: ${on ? "ON" : "OFF"}`,
+      raw: hexDump(frame),
+    };
+
     if (this.demoMode) {
-      this.send("sq:log", {
-        level: "dsp",
-        msg: `PAFL ${label}: ${on ? "ON" : "OFF"}`,
-      });
+      this.send("sq:log", entry);
       return;
     }
     if (this.conn?.connected) {
-      const val = on ? 0x0001 : 0x0000;
-      this.conn.send(Buffer.from([0xf7, 0x08, 0x15, 0x0c, b3, 0x00, val & 0xff, (val >> 8) & 0xff]));
-      this.send("sq:log", {
-        level: "dsp",
-        msg: `PAFL ${label}: ${on ? "ON" : "OFF"}`,
-      });
+      this.conn.send(frame);
+      this.send("sq:log", entry);
     }
   }
 
@@ -393,10 +402,11 @@ class SQController {
       destType === 0x1d ? "USB" :
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
-    this.sendPatchFrame(sourceB3, 0x0f, ch0 & 0xff, destType & 0xff);
+    const frame = this.sendPatchFrame(sourceB3, 0x0f, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
       msg: `Route ${b3ToLabel(sourceB3)} → ${destName} Out ${destChannel}`,
+      raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
@@ -420,10 +430,11 @@ class SQController {
       destType === 0x1d ? "USB" :
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
-    this.sendPatchFrame(fxIndex, side === "L" ? 0x16 : 0x17, ch0 & 0xff, destType & 0xff);
+    const frame = this.sendPatchFrame(fxIndex, side === "L" ? 0x16 : 0x17, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
       msg: `Route FX${fxIndex + 1} ${side} → ${destName} Out ${destChannel}`,
+      raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
@@ -445,10 +456,11 @@ class SQController {
       source === 0x03 ? "USB" :
       source === 0x04 ? "I/O Port" : `0x${source.toString(16)}`;
 
-    this.sendPatchFrame(sourceChannel, source, destB3, 0x20);
+    const frame = this.sendPatchFrame(sourceChannel, source, destB3, 0x20);
     this.send("sq:log", {
       level: "dsp",
       msg: `Input ${destLabel} → ${srcLabel} ${sourceChannel + 1}`,
+      raw: hexDump(frame),
     });
     // Demo: sendPatchFrame already updated the local model above. Live: the
     // mixer does not echo app-initiated input patches back on the
@@ -621,8 +633,9 @@ class SQController {
    * Send a single routing patch as a 0xF7 + 7-byte DSP frame. In demo mode
    * the frame is fed straight into the routing model instead of the network.
    */
-  private sendPatchFrame(ch: number, modifier: number, valLo: number, valHi: number): void {
+  private sendPatchFrame(ch: number, modifier: number, valLo: number, valHi: number): Buffer {
     const payload = Buffer.from([0x0b, 0x0b, 0x0d, ch, modifier, valLo, valHi]);
+    const frame = Buffer.concat([Buffer.from([0xf7]), payload]);
     if (this.demoMode) {
       this.model.handleDsp({
         ch,
@@ -633,8 +646,9 @@ class SQController {
         raw: payload,
       });
     } else if (this.conn?.connected) {
-      this.conn.send(Buffer.concat([Buffer.from([0xf7]), payload]));
+      this.conn.send(frame);
     }
+    return frame;
   }
 
   // ── Demo mode ──────────────────────────────────────────────────────
@@ -1071,7 +1085,7 @@ class SQController {
         const hex = Array.from(d.raw.slice(0, 8))
           .map((b) => b.toString(16).padStart(2, "0"))
           .join(" ");
-        this.send("sq:log", { level: "dsp", msg: `DSP  ${hex}` });
+        this.send("sq:log", { level: "dsp", msg: `DSP  ${hex}`, raw: hexDump(d.raw) });
       }
     });
 
@@ -1138,6 +1152,7 @@ class SQController {
       this.send("sq:log", {
         level: "frame",
         msg: `Routing/config block (sub=0x10): ${payload.length} bytes received`,
+        raw: hexDump(payload),
       });
     });
 
@@ -1219,6 +1234,7 @@ class SQController {
         this.send("sq:log", {
           level: "frame",
           msg: `Meter packet: id=${idStr} body=${p.len}B${p.decoded ? "" : " (undecoded)"}${sample}${hot}${changes}`,
+          raw: p.raw ? hexDump(p.raw) : undefined,
         });
         // First sight of an undecoded shape — keep one raw datagram next to
         // the other diagnostics so the packet layout can be analyzed offline.

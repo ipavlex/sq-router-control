@@ -68,7 +68,7 @@ window.sq.onInitialState(() => {
   routing.freezeEditTable();
 });
 
-window.sq.onLog((p: LogPayload) => log.pushLog(p.level, p.msg));
+window.sq.onLog((p: LogPayload) => log.pushLog(p.level, p.msg, p.raw));
 
 // Live input meters (UDP, ~25-50 Hz) — the routing tab coalesces per frame.
 window.sq.onMeters((p) => {

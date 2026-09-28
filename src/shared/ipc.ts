@@ -153,6 +153,8 @@ export type LogLevel = "dsp" | "frame" | "ok" | "warn" | "error";
 export interface LogPayload {
   level: LogLevel;
   msg: string;
+  /** Space-separated lowercase hex of the wire bytes, when the entry maps to a frame. */
+  raw?: string;
 }
 
 /**
