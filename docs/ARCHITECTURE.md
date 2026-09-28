@@ -62,6 +62,7 @@ src/
 ├── main/                     # main-процесс Electron
 │   ├── main.ts               # окно, IPC, SQController (подключение, демо, сцены)
 │   ├── preload.ts            # мост window.sq (contextBridge)
+│   ├── discovery.ts          # скан локальной сети для автообнаружения пультов (CN-C1)
 │   ├── models.ts             # спецификации SQ-5/6/7 и физические I/O
 │   ├── routing.ts            # декодер патч-кадров + RoutingModel
 │   ├── state.ts              # MixerState: фейдер/мьют/гейн/pan/HPF/… + декодеры
@@ -158,6 +159,8 @@ universal, подпись кода отключена (`identity: null`). Окн
 |---|---|---|
 | `connect(host, port?)` | `sq:connect` | Подключение к пульту |
 | `disconnect()` | `sq:disconnect` | Разрыв соединения |
+| `discoverConsoles(subnets?, port?)` | `sq:discoverConsoles` | Скан локальной сети на SQ-пульты (CN-C1) |
+| `cancelDiscovery()` | `sq:cancelDiscovery` | Прерывание скана |
 | `getSnapshot()` | `sq:getSnapshot` | Текущий снапшот роутинга + состояния |
 | `demoRefresh()` | `sq:demoRefresh` | Новый вариант демо-роутинга |
 | `startDemo()` | `sq:startDemo` | Запуск демо-режима |
@@ -177,6 +180,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 | Подписка | Канал | Payload | Источник |
 |---|---|---|---|
 | `onStatus` | `sq:status` | `StatusPayload` | connect/disconnect |
+| `onConsoleFound` | `sq:discovered` | `DiscoveredConsole` | скан локальной сети (CN-C1) |
 | `onRouting` | `sq:routing` | `SnapshotPayload` | throttle 120 мс |
 | `onLog` | `sq:log` | `LogPayload` | все события/кадры |
 | `onMeters` | `sq:meters` | `MetersPayload` | UDP ~25–50 Гц |

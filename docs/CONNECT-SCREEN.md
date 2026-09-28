@@ -42,6 +42,10 @@
 | Порт | `#port-input` | TCP-порт, по умолчанию `51326` |
 | Подсказка | `.hint` | «Порт по умолчанию: `51326` … Порт MIDI — `51325`» |
 | «Подключиться» | `#connect-btn` (`.btn.primary`) | Запуск подключения |
+| «🔍 Найти пульты в сети» | `#discover-btn` (`.btn.ghost.full`) | Запуск сканирования локальной сети (CN-C1) |
+| «Отмена» | `#discover-cancel` (`.btn.danger.sm`) | Прерывание активного поиска (скрыта, когда поиск не идёт) |
+| Статус поиска | `#discover-status` (`.hint`) | Ход / итог / ошибка поиска |
+| Список найденных | `#discover-list` (`.discover-list`) | Найденные пульты; клик подставляет хост и порт в поля |
 | Разделитель «или» | `.divider` | Визуальное отделение демо-режима |
 | «▶ Демо-режим (без пульта)» | `#demo-btn` (`.btn.ghost.full`) | Запуск симуляции |
 | Сообщение | `#connect-msg` (`.msg`, `hidden`) | Ошибка/инфо-плашка под кнопками |
@@ -110,6 +114,41 @@
 
 Сообщения выводятся через `setMessage(text, "error")` (класс `.msg.error`,
 красный). `setMessage("")` скрывает плашку.
+
+### 4.2. Поиск пультов в сети (CN-C1)
+
+Кнопка «🔍 Найти пульты в сети» запускает **скан локальной подсети** — без
+mDNS/Bonjour и без внешних зависимостей. Логика целиком в main-процессе
+(`src/main/discovery.ts`), renderer только отображает результаты.
+
+1. `doDiscover()` (`connect/index.ts`) вызывает `window.sq.discoverConsoles()`
+   → IPC `sq:discoverConsoles` → `SQController.discover()`.
+2. `scanNetwork()` берёт /24-префиксы всех активных IPv4-интерфейсов
+   (`localSubnets()`, через `os.networkInterfaces()`; loopback и link-local
+   `169.254/16` пропускаются) и раскрывает каждый в адреса `.1`–`.254`.
+3. По каждому адресу `probeHost()` открывает TCP на порт `51326` (параллельно,
+   до 32 проб, таймаут 600 мс) и выполняет **минимальный префикс рукопожатия**:
+   meter-sub → ack → ждёт кадр версии (`sub=0x02`). Моделью считается только
+   хост, приславший кадр версии, — открытый, но «не тот» порт не попадает в
+   список.
+4. Каждая находка сразу уходит в renderer событием `sq:discovered`
+   (`onConsoleFound`), поэтому список наполняется по ходу скана. По клику на
+   строку хост и порт подставляются в `#ip-input` / `#port-input` (подключение
+   автоматически не запускается).
+5. По завершении промис возвращает `DiscoveryResult` (`found`, `scanned`,
+   `subnets`, `durationMs`, `cancelled`), и статус показывает итог. Кнопка
+   «Отмена» → `sq:cancelDiscovery` прерывает скан (`AbortController`,
+   in-flight сокеты закрываются).
+
+Error/edge cases: нет активных подсетей → «Активные локальные сети не найдены…»;
+пультов нет → «Пульты не найдены…»; ошибка — текст в `#discover-status.error`.
+В демо-режиме поиск бесполезен (пульт симулируется в приложении), но
+безвреден.
+
+Проверка без пульта: юнит-тесты `src/main/discovery.test.ts` гоняют `probeHost`
+и `scanNetwork` против фейкового SQ-TCP-сервера на loopback; `localSubnets` /
+`expandSubnet` покрыты как чистые функции. Финальная проверка — с реальным
+пультом в сети (группа C).
 
 ## 5. Поток демо-режима
 
@@ -210,19 +249,23 @@
 | Файл | Ответственность |
 |---|---|
 | `src/renderer/connect/view.html` | Разметка экрана подключения |
-| `src/renderer/connect/index.ts` | `doConnect`, `doStartDemo`, `doDisconnect`, `doRefresh`, привязки клавиш |
+| `src/renderer/connect/index.ts` | `doConnect`, `doStartDemo`, `doDiscover`, `doDisconnect`, `doRefresh`, привязки клавиш |
 | `src/renderer/core/utils.ts` | `isValidHost`, `setMessage`, `setLoading`, `getRecent`/`addRecent`/`renderRecent`, `showScreen` |
 | `src/renderer/index.ts` | Старт: подстановка недавнего хоста, фокус |
 | `src/renderer/dashboard/index.ts` | `enterDashboard`, обработка разрыва связи |
-| `src/shared/ipc.ts` | `ConnectResult`, `VersionInfo`, `ModelSpec` |
-| `src/main/preload.ts` | Мост `window.sq.connect` / `startDemo` / `disconnect` |
-| `src/main/main.ts` | `SQController.connect`/`startDemo`, IPC `sq:connect` и др. |
+| `src/shared/ipc.ts` | `ConnectResult`, `VersionInfo`, `ModelSpec`, `DiscoveredConsole`, `DiscoveryResult` |
+| `src/main/preload.ts` | Мост `window.sq.connect` / `startDemo` / `discoverConsoles` / … |
+| `src/main/main.ts` | `SQController.connect`/`startDemo`/`discover`, IPC `sq:connect` и др. |
+| `src/main/discovery.ts` | Скан локальной подсети: `subnetsFromInterfaces`, `expandSubnet`, `probeHost`, `scanNetwork` |
 | `src/main/transport/connection.ts` | TCP-рукопожатие, порт, таймауты, keepalive |
 | `src/renderer/assets/styles.css` | Стили `.card`, `.ip-input`, `.msg`, `.recent-chip` и др. |
 
 ## 11. Ограничения
 
-- Нет автообнаружения пультов (mDNS/скан сети) — хост вводится вручную.
+- Автообнаружение пультов — есть (CN-C1, §4.2), но это **скан локальной
+  подсети /24** по TCP-порту, а не mDNS/Bonjour: пульт находится только в той же
+  подсети, что и компьютер. На macOS первый скан может запросить разрешение на
+  доступ к локальной сети.
 - Авто-переподключение при разрыве — есть (CN-01, §8.1): до 8 попыток с
   backoff, затем ручной возврат.
 - Порт хранится не для каждого хоста, а как одно общее значение по умолчанию

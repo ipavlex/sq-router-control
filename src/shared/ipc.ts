@@ -134,6 +134,32 @@ export interface StatusPayload {
   reconnect?: ReconnectInfo;
 }
 
+/** One SQ console found by a local-network scan (CN-C1). */
+export interface DiscoveredConsole {
+  host: string;
+  port: number;
+  /** Raw model byte from the version frame (null if unknown). */
+  model: number | null;
+  /** Marketing name (SQ-5 / SQ-6 / SQ-7), or null. */
+  modelName: string | null;
+  /** Firmware "fwA.fwB[.build]", or null. */
+  fw: string | null;
+}
+
+/** Result of a completed (or cancelled) local-network discovery scan. */
+export interface DiscoveryResult {
+  ok: boolean;
+  /** /24 prefixes that were swept (empty when an explicit host list was used). */
+  subnets: string[];
+  found: DiscoveredConsole[];
+  /** Number of candidate hosts probed. */
+  scanned: number;
+  durationMs: number;
+  /** True when the scan was stopped by the user. */
+  cancelled?: boolean;
+  error?: string;
+}
+
 export interface MetersPayload {
   /** dBFS levels for input channels 0..47 (null = no signal / floor). */
   inputs: (number | null)[];
@@ -188,6 +214,13 @@ export interface SqApi {
   cancelReconnect(): Promise<boolean>;
   getSnapshot(): Promise<SnapshotPayload>;
   demoRefresh(): Promise<SnapshotPayload>;
+  /**
+   * Sweep the local subnet(s) (or an explicit `subnets` list) for SQ consoles.
+   * Streams each hit via `onConsoleFound`; resolves when the scan finishes.
+   */
+  discoverConsoles(subnets?: string[], port?: number): Promise<DiscoveryResult>;
+  /** Abort an in-progress discovery scan. */
+  cancelDiscovery(): Promise<boolean>;
   setMonitorOutput(side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   setPafl(b3: number, on: boolean): Promise<boolean>;
   setOutputPatch(sourceB3: number, destType: number, destChannel: number): Promise<boolean>;
@@ -205,6 +238,8 @@ export interface SqApi {
   startDemo(): Promise<ConnectResult>;
   getStatus(): Promise<StatusPayload>;
   onStatus(cb: (p: StatusPayload) => void): () => void;
+  /** Fired for each console found during a discovery scan. */
+  onConsoleFound(cb: (c: DiscoveredConsole) => void): () => void;
   onRouting(cb: (p: SnapshotPayload) => void): () => void;
   onLog(cb: (p: LogPayload) => void): () => void;
   /** Live input channel levels/meters. Fired from UDP at up to ~30 Hz. */

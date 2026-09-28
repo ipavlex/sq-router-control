@@ -338,6 +338,70 @@ body {
   border-color: var(--accent);
 }
 
+/* ── Console discovery (CN-C1) ─────────────────────────────────────── */
+.discover {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.discover #discover-cancel {
+  align-self: flex-start;
+}
+
+.discover-status {
+  margin: 0;
+}
+
+.discover-status.error {
+  color: var(--red);
+}
+
+.discover-status.info {
+  color: var(--accent);
+}
+
+.discover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.discover-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.discover-item:hover {
+  border-color: var(--accent);
+  background: rgba(79, 156, 249, 0.08);
+}
+
+.discover-name {
+  font-weight: 600;
+}
+
+.discover-addr {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 /* ── Topbar ────────────────────────────────────────────────────────── */
 #dash-screen {
   padding: 0;

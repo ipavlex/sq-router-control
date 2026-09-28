@@ -212,12 +212,27 @@
 
 ## 3. Группа C — гибрид
 
-- [ ] **CN-C1 — Автообнаружение пультов (mDNS / скан сети)**
-  - Источник: `CONNECT-SCREEN.md` §11.
-  - Суть: парсер/скан и UI пишутся без пульта; валидация — с пультом в сети.
-  - Файлы: `src/main/main.ts`, `src/main/transport/connection.ts`,
-    `src/renderer/connect/*`.
-  - Проверка: частично на локальной сети; финально — на пульте.
+- [x] **CN-C1 — Автообнаружение пультов (mDNS / скан сети)**
+  - Источник: `CONNECT-SCREEN.md` §11 (пункт снят, см. §4.2).
+  - Результат: реализован **скан локальной подсети** без внешних зависимостей
+    (mDNS не используется — потребовал бы библиотеку, а тип сервиса без пульта
+    не подтвердить). `src/main/discovery.ts`: `subnetsFromInterfaces`/
+    `localSubnets` (активные IPv4 /24, без loopback и `169.254/16`),
+    `expandSubnet` (`.1`–`.254`), `probeHost` (TCP `51326` + минимальный
+    префикс рукопожатия до кадра версии `sub=0x02`) и `scanNetwork` (пул до 32
+    проб, общий UDP-сокет, `AbortController`, поток найденного через `onFound`).
+    `SQController.discover/cancelDiscovery` (+ IPC `sq:discoverConsoles` /
+    `sq:cancelDiscovery`), мост `window.sq.discoverConsoles/cancelDiscovery/
+    onConsoleFound`, на экране подключения — кнопка «🔍 Найти пульты в сети»,
+    статус, список с потоковым пополнением и кнопка «Отмена»; клик по находке
+    подставляет хост/порт.
+  - Файлы: `src/main/discovery.ts` (+`discovery.test.ts`), `src/shared/ipc.ts`,
+    `src/main/preload.ts`, `src/main/main.ts`, `src/renderer/connect/*`,
+    `src/renderer/core/{types,utils}.ts`, `src/renderer/assets/styles.css`.
+  - Проверка: `npm test` — 113/113 (из них 13 новых: fake SQ-сервер на loopback
+    для `probeHost`/`scanNetwork` + чистые `subnetsFromInterfaces`/`expandSubnet`);
+    `npm run typecheck` и `npm run build` — зелёные. Финальная проверка — на
+    реальном пульте в сети (группа C).
 
 - [ ] **MON-C1 — Воспроизводимые баги роутинга в демо**
   - Источник: `MONITOR-TAB.md` §13 (первая строка).
@@ -263,7 +278,7 @@
 | `ROUTING-TAB.md` §13 | RT-01 |
 | `MONITOR-TAB.md` §12–13 | MON-B1…B5, MON-C1 |
 | `LOG-TAB.md` §9, §TODO | LG-01, LG-02, LG-04 закрыты; LG-03 отменён |
-| `CONNECT-SCREEN.md` §11 | CN-01 закрыт, CN-02 отменён; CN-03, CN-C1 |
+| `CONNECT-SCREEN.md` §11 | CN-01 закрыт, CN-02 отменён, CN-C1 закрыт; CN-03 |
 | `SQ-PROTOCOL.md` §8.8, §10 | TS-01 закрыт; PR-B1…B5 |
 
 **Связи с существующим кодом:** `exportFile` — `src/renderer/dashboard/index.ts:112`,

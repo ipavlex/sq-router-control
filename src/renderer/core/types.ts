@@ -19,6 +19,10 @@ export interface ElementRefs {
   connectBtn: HTMLButtonElement;
   demoBtn: HTMLButtonElement;
   connectMsg: HTMLElement;
+  discoverBtn: HTMLButtonElement;
+  discoverCancel: HTMLButtonElement;
+  discoverStatus: HTMLElement;
+  discoverList: HTMLElement;
   recentRow: HTMLElement;
   recentList: HTMLElement;
   topbarTitle: HTMLElement;
@@ -116,4 +120,6 @@ export type {
   VersionInfo,
   ConnectResult,
   ReconnectInfo,
+  DiscoveredConsole,
+  DiscoveryResult,
 } from "../../shared/ipc";

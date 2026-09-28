@@ -14,7 +14,8 @@ import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
 import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
 import { analyzeStereoTable } from "./paramdata-diagnostics";
-import type { ExportFileResult } from "../shared/ipc";
+import { scanNetwork } from "./discovery";
+import type { DiscoveredConsole, DiscoveryResult, ExportFileResult } from "../shared/ipc";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -234,6 +235,9 @@ class SQController {
   /** Invalidates pending reconnect callbacks after cancel / manual reconnect. */
   private reconnectGen = 0;
 
+  /** Non-null while a local-network discovery sweep is running (abort handle). */
+  private discoveryAbort: AbortController | null = null;
+
   // Demo mode state
   private demoMode = false;
   private demoVersion: VersionInfo | null = null;
@@ -345,6 +349,76 @@ class SQController {
     // Manual disconnect: no auto-retry.
     this.stopReconnect();
     this.teardown();
+  }
+
+  // ── console discovery (CN-C1) ─────────────────────────────────────
+
+  /**
+   * Sweep the local subnet(s) for SQ consoles on the SQ TCP port. Results are
+   * streamed to the renderer via `sq:discovered`; the returned promise resolves
+   * once every candidate has been probed (or the scan is cancelled). Only one
+   * sweep runs at a time.
+   */
+  async discover(subnets?: string[], port?: number): Promise<DiscoveryResult> {
+    if (this.discoveryAbort) {
+      return {
+        ok: false,
+        subnets: [],
+        found: [],
+        scanned: 0,
+        durationMs: 0,
+        error: "Сканирование уже выполняется.",
+      };
+    }
+    const ctrl = new AbortController();
+    this.discoveryAbort = ctrl;
+    const started = Date.now();
+    this.send("sq:log", { level: "frame", msg: "Discovery: scanning local network for SQ consoles…" });
+    try {
+      const { found, scanned, subnets: swept } = await scanNetwork(
+        { subnets, port, signal: ctrl.signal },
+        (c: DiscoveredConsole) => {
+          this.send("sq:discovered", c);
+          this.send("sq:log", {
+            level: "ok",
+            msg: `Discovery: found ${c.modelName ?? "SQ"} (FW ${c.fw ?? "?"}) at ${c.host}:${c.port}`,
+          });
+        }
+      );
+      const durationMs = Date.now() - started;
+      this.send("sq:log", {
+        level: "ok",
+        msg: `Discovery: ${found.length} console(s) on ${scanned} host(s) in ${Math.round(
+          durationMs / 1000
+        )}s.`,
+      });
+      return {
+        ok: true,
+        subnets: swept,
+        found,
+        scanned,
+        durationMs,
+        cancelled: ctrl.signal.aborted,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        subnets: [],
+        found: [],
+        scanned: 0,
+        durationMs: Date.now() - started,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      this.discoveryAbort = null;
+    }
+  }
+
+  /** Abort an in-progress discovery sweep. Returns false if none is running. */
+  cancelDiscovery(): boolean {
+    if (!this.discoveryAbort) return false;
+    this.discoveryAbort.abort();
+    return true;
   }
 
   // ── auto-reconnect ────────────────────────────────────────────────
@@ -1552,6 +1626,10 @@ function registerIpc(): void {
     controller.cancelReconnect();
     return true;
   });
+  ipcMain.handle("sq:discoverConsoles", (_e, subnets?: string[], port?: number) =>
+    controller.discover(subnets, port)
+  );
+  ipcMain.handle("sq:cancelDiscovery", () => controller.cancelDiscovery());
   ipcMain.handle("sq:getSnapshot", () => controller.snapshot());
   ipcMain.handle("sq:demoRefresh", () => controller.demoRefresh());
   ipcMain.handle("sq:setMonitorOutput", (_e, side: "L" | "R", destType: number, destChannel: number) => {
