@@ -60,6 +60,7 @@ export interface ElementRefs {
   markLog: HTMLButtonElement;
   saveLog: HTMLButtonElement;
   logRawToggle: HTMLButtonElement;
+  pauseLog: HTMLButtonElement;
   saveRoutingBtn: HTMLButtonElement;
   exportReaperBtn: HTMLButtonElement;
   topbarScene: HTMLElement;

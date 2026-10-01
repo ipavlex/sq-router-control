@@ -11,6 +11,11 @@ const MAX_LOG_LINES = 400;
 /** When true, lines that carry `raw` hex render the bytes instead of the text. */
 let rawMode = false;
 
+/** When true the on-screen feed is frozen: new lines are buffered, not drawn. */
+let paused = false;
+/** Lines received while paused — flushed to the DOM when the feed resumes. */
+const pausedLines: HTMLElement[] = [];
+
 function span(className: string, text: string): HTMLSpanElement {
   const el = document.createElement("span");
   el.className = className;
@@ -24,14 +29,53 @@ function displayText(line: HTMLElement): string {
   return rawMode && raw ? raw : line.dataset.parsed ?? "";
 }
 
-function appendLine(line: HTMLElement): void {
-  elementRefs.log.appendChild(line);
-  logLineCount++;
+/** Drop the oldest lines once the on-screen feed exceeds the line cap. */
+function trimToMax(): void {
   while (logLineCount > MAX_LOG_LINES) {
     if (elementRefs.log.firstChild) elementRefs.log.removeChild(elementRefs.log.firstChild);
     logLineCount--;
   }
+}
+
+function appendLine(line: HTMLElement): void {
+  // While paused the feed is frozen: hold the line back and refresh only the
+  // "N в буфере" counter on the button. The DOM is left untouched.
+  if (paused) {
+    pausedLines.push(line);
+    while (pausedLines.length > MAX_LOG_LINES) pausedLines.shift();
+    updatePauseButton();
+    return;
+  }
+  elementRefs.log.appendChild(line);
+  logLineCount++;
+  trimToMax();
   elementRefs.log.scrollTop = elementRefs.log.scrollHeight;
+}
+
+/** Reflect the pause state on the button ("Стоп" ↔ "Продолжить (N)"). */
+function updatePauseButton(): void {
+  elementRefs.pauseLog.classList.toggle("active", paused);
+  elementRefs.pauseLog.setAttribute("aria-pressed", String(paused));
+  elementRefs.pauseLog.textContent = paused ? `Продолжить (${pausedLines.length})` : "Стоп";
+}
+
+/**
+ * Toggle the frozen feed. Resuming flushes the buffered lines into the DOM in
+ * order and re-applies the current raw/parsed representation to them.
+ */
+function togglePause(): void {
+  paused = !paused;
+  if (!paused && pausedLines.length > 0) {
+    for (const line of pausedLines) {
+      elementRefs.log.appendChild(line);
+      logLineCount++;
+    }
+    pausedLines.length = 0;
+    trimToMax();
+    elementRefs.log.scrollTop = elementRefs.log.scrollHeight;
+    applyLogMode();
+  }
+  updatePauseButton();
 }
 
 export function pushLog(level: LogLevel, msg: string, raw?: string): void {
@@ -68,7 +112,9 @@ export function clear(): void {
   elementRefs.log.innerHTML = "";
   logLineCount = 0;
   markCount = 0;
+  pausedLines.length = 0;
   elementRefs.updateStat.textContent = "";
+  updatePauseButton();
 }
 
 /** Show routing update counters in the log panel header. */
@@ -138,6 +184,8 @@ elementRefs.logRawToggle.addEventListener("click", () => {
 elementRefs.clearLog.addEventListener("click", clear);
 elementRefs.markLog.addEventListener("click", mark);
 elementRefs.saveLog.addEventListener("click", saveLogToFile);
+elementRefs.pauseLog.addEventListener("click", togglePause);
+updatePauseButton();
 
 // M (layout-independent) — drop a mark while the log tab is visible.
 window.addEventListener("keydown", (e: KeyboardEvent) => {
