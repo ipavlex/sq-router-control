@@ -202,7 +202,6 @@ async function onMonEnableChange(): Promise<void> {
       if (clear.length > 0) await window.sq.clearOutputs(clear);
     }
   }
-  renderSendDebug(planActiveSelection());
 }
 
 // ── output usage annotations ────────────────────────────────────────
@@ -429,7 +428,6 @@ function applySafeOutputLock(): void {
     }
   }
   updateSourceLock();
-  renderSendDebug(planActiveSelection());
 }
 
 /** Whether monitor changes should be applied to the actual mixer. */
@@ -464,47 +462,10 @@ interface PlannedSend {
   /** FX engine index / side for kind "fx". */
   fxIndex?: number;
   fxSide?: "L" | "R";
-  /** Human-readable source, e.g. "Mix 1". */
-  sourceLabel: string;
-}
-
-/** Hex byte for the debug readout ("0x1a"). */
-function hexByte(n: number): string {
-  return `0x${n.toString(16).padStart(2, "0")}`;
-}
-
-/** Human label for a source b3 (mirrors main/routing.ts b3ToLabel). */
-function b3DebugLabel(b3: number): string {
-  if (b3 >= 0x00 && b3 <= 0x2f) return `Input ${b3 + 1}`;
-  if (b3 >= 0x40 && b3 <= 0x43) return `FX ${b3 - 0x40 + 1}`;
-  if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x58 + 1}`;
-  if (b3 === 0x68) return "Main LR";
-  if (b3 >= 0x73 && b3 <= 0x78) {
-    const slot = b3 - 0x73;
-    return `Matrix ${Math.floor(slot / 2) + 1} ${slot % 2 === 0 ? "L" : "R"}`;
-  }
-  return `b3 ${hexByte(b3)}`;
-}
-
-/** Human label for an output destination type. */
-function destTypeDebugName(destType: number): string {
-  return destType === 0x1a ? "Local Out" :
-    destType === 0x1b ? "ME" :
-    destType === 0x1c ? "SLink Out" :
-    destType === 0x1d ? "USB Out" :
-    destType === 0x1e ? "I/O Port Out" :
-    `dest ${hexByte(destType)}`;
-}
-
-/** "Local Out 1" / "— не выбран —" for the debug readout. */
-function destDebugLabel(dest: Dest | null): string {
-  return dest ? `${destTypeDebugName(dest.destType)} ${dest.destChannel}` : "— не выбран —";
 }
 
 /**
  * Build the list of patches for the current source + L/R output selection.
- * Mirrors exactly what routeActiveSelection() sends, so the debug readout
- * shows the real commands.
  */
 function planActiveSelection(): PlannedSend[] {
   const L = parseDest(elementRefs.monLDest);
@@ -520,43 +481,32 @@ function planActiveSelection(): PlannedSend[] {
       //   0b 0b 0d <master> 0f <L-out-1> 1a
       //   0b 0b 0d <master> 10 <R-out-1> 1a
       // Sending the slave channel as the source (modifier 0x0F) is ignored.
-      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
-      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3, rightHalf: true, sourceLabel: `${b3DebugLabel(leftChannelB3)} R` });
+      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3 });
+      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3, rightHalf: true });
     } else {
       // Ad-hoc pair: two independent mono channels → one patch frame each.
-      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
-      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rightChannelB3, sourceLabel: b3DebugLabel(rightChannelB3) });
+      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3 });
+      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rightChannelB3 });
     }
   } else if (leftChannelB3 !== null) {
-    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
-    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3 });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3 });
   } else if (activeFxIndex !== null) {
-    plan.push({ side: "L", dest: L, kind: "fx", fxIndex: activeFxIndex, fxSide: "L", sourceLabel: `FX ${activeFxIndex + 1} L` });
-    plan.push({ side: "R", dest: R, kind: "fx", fxIndex: activeFxIndex, fxSide: "R", sourceLabel: `FX ${activeFxIndex + 1} R` });
+    plan.push({ side: "L", dest: L, kind: "fx", fxIndex: activeFxIndex, fxSide: "L" });
+    plan.push({ side: "R", dest: R, kind: "fx", fxIndex: activeFxIndex, fxSide: "R" });
   } else if (paflActive) {
-    plan.push({ side: "L", dest: L, kind: "pafl", sourceLabel: "PAFL L" });
-    plan.push({ side: "R", dest: R, kind: "pafl", sourceLabel: "PAFL R" });
+    plan.push({ side: "L", dest: L, kind: "pafl" });
+    plan.push({ side: "R", dest: R, kind: "pafl" });
   } else if (activeMatrixIndex !== null) {
     const lSlot = matrixSlotB3(activeMatrixIndex, "L");
     const rSlot = matrixSlotB3(activeMatrixIndex, "R");
-    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: lSlot, sourceLabel: b3DebugLabel(lSlot) });
-    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rSlot, sourceLabel: b3DebugLabel(rSlot) });
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: lSlot });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rSlot });
   } else if (activeSourceB3 !== null) {
-    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: activeSourceB3, sourceLabel: b3DebugLabel(activeSourceB3) });
-    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: activeSourceB3, sourceLabel: b3DebugLabel(activeSourceB3) });
+    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: activeSourceB3 });
+    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: activeSourceB3 });
   }
   return plan;
-}
-
-/** IPC call string for the debug readout, e.g. `setOutputPatch(0x58, 0x1a:1)`. */
-function planCommand(p: PlannedSend): string {
-  if (!p.dest) return "(выход не выбран)";
-  const dest = `${hexByte(p.dest.destType)}:${p.dest.destChannel}`;
-  if (p.kind === "bus" && p.sourceB3 !== undefined) {
-    return `setOutputPatch(${hexByte(p.sourceB3)}, ${dest}, ${p.rightHalf ? "0x10" : "0x0f"})`;
-  }
-  if (p.kind === "fx") return `setFxOutputPatch(${p.fxIndex}, ${p.fxSide}, ${dest})`;
-  return `setMonitorOutput(${p.side}, ${dest})`;
 }
 
 /** Send one planned patch to the console (no-op when its output isn't chosen). */
@@ -568,59 +518,6 @@ async function sendPlanned(p: PlannedSend): Promise<void> {
     await window.sq.setFxOutputPatch(p.fxIndex, p.fxSide, p.dest.destType, p.dest.destChannel);
   } else if (p.kind === "pafl") {
     await window.sq.setMonitorOutput(p.side, p.dest.destType, p.dest.destChannel);
-  }
-}
-
-/**
- * Render the debug readout under the L/R selectors: for every side, the
- * selected output and the source that is (or would be) patched to it, with
- * the exact IPC command. Visible even while "Применять" is off so the plan
- * can be inspected before anything is sent.
- */
-function renderSendDebug(plan: PlannedSend[]): void {
-  const container = elementRefs.monSendDebug;
-  if (!container) return;
-  container.innerHTML = "";
-
-  const title = document.createElement("div");
-  title.className = "mon-send-debug-title";
-  title.textContent = monEnabled() ? "Отправка на пульт: ВКЛ" : "Отправка на пульт: ВЫКЛ (показан план)";
-  container.appendChild(title);
-
-  if (plan.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "mon-send-debug-empty";
-    empty.textContent = "Источник не выбран";
-    container.appendChild(empty);
-    return;
-  }
-
-  for (const p of plan) {
-    const row = document.createElement("div");
-    row.className = `mon-send-debug-row${monEnabled() ? "" : " off"}`;
-
-    const side = document.createElement("span");
-    side.className = `mon-send-debug-side ${p.side.toLowerCase()}`;
-    side.textContent = p.side;
-
-    const dest = document.createElement("span");
-    dest.className = "mon-send-debug-dest";
-    dest.textContent = destDebugLabel(p.dest);
-
-    const arrow = document.createElement("span");
-    arrow.className = "mon-send-debug-arrow";
-    arrow.textContent = "←";
-
-    const src = document.createElement("span");
-    src.className = "mon-send-debug-src";
-    src.textContent = p.sourceLabel;
-
-    const cmd = document.createElement("span");
-    cmd.className = "mon-send-debug-cmd";
-    cmd.textContent = planCommand(p);
-
-    row.append(side, dest, arrow, src, cmd);
-    container.appendChild(row);
   }
 }
 
@@ -637,7 +534,6 @@ function renderSendDebug(plan: PlannedSend[]): void {
  */
 async function routeActiveSelection(): Promise<void> {
   const plan = planActiveSelection();
-  renderSendDebug(plan);
   if (!monEnabled()) return;
   for (const p of plan) await sendPlanned(p);
 }
@@ -1338,7 +1234,6 @@ export function reset(): void {
   activeMatrixIndex = null;
   elementRefs.paflBtn.classList.remove("active");
   elementRefs.mainlrBtn.classList.add("active");
-  renderSendDebug(planActiveSelection());
 }
 
 // ── bindings ─────────────────────────────────────────────────────────

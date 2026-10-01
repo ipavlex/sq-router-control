@@ -39,7 +39,6 @@ export const elementRefs: ElementRefs = {
   mainlrBtn: $("#mainlr-btn"),
   paflBtn: $("#pafl-btn"),
   monEnable: $("#mon-enable"),
-  monSendDebug: $("#mon-send-debug"),
   monLockBtn: $("#mon-lock-btn"),
   monLockModal: $("#mon-lock-modal"),
   monLockTabs: $("#mon-lock-tabs"),

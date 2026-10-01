@@ -42,7 +42,6 @@ export interface ElementRefs {
   mainlrBtn: HTMLButtonElement;
   paflBtn: HTMLButtonElement;
   monEnable: HTMLInputElement;
-  monSendDebug: HTMLElement;
   monLockBtn: HTMLButtonElement;
   monLockModal: HTMLElement;
   monLockTabs: HTMLElement;
