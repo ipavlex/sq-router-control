@@ -83,8 +83,8 @@ TRS B = Local Out 14). Оба используют адрес `0x1a`.
 
 | Тип | L-выход | R-выход | Комментарий |
 |---|---|---|---|
-| **Стерео-пара** (линк на пульте) | Левый канал | Правый канал | Два отдельных output-patch кадра `0x0F`: левый канал → L-выход, правый → R-выход |
-| **Ад-хок стерео** (Shift+клик) | Первый канал | Второй канал | Ручная пара из двух моно-каналов; та же схема — два кадра |
+| **Стерео-пара** (линк на пульте) | Master-b3, modifier `0x0F` | Тот же master-b3, modifier `0x10` | Один гангованный источник: левая половина — кадр `0x0F`, правая — `0x10`; `sourceB3` у обоих — master-канал. Кадр с ведомым каналом пульт игнорирует |
+| **Ад-хок стерео** (Shift+клик) | Первый канал | Второй канал | Ручная пара из двух независимых моно-каналов; по кадру `0x0F` на каждый (собственный `sourceB3`) |
 | **Моно-канал** | Канал | Канал | Один источник в оба выхода |
 | **Микс** | Микс (b3: `0x58`–`0x63`) | Микс | Один источник в оба выхода |
 | **Main LR** | Main LR (b3: `0x68`) | Main LR | Один источник в оба выхода |
@@ -251,10 +251,11 @@ UDP-поток метров приходит на 25–50 Гц. Renderer кеш�
 
 | Команда | Где в коде | Назначение |
 |---|---|---|
-| `setOutputPatch(sourceB3, destType, destChannel)` | `routeSourceToOutput()`, `routeMatrixToOutput()` | Патч обычного источника (каналы, миксы, LR) и матриц (слоты `0x73`–`0x78`) на выход |
-| `setFxOutputPatch(fxIndex, side, destType, destChannel)` | `routeFxToOutput()` | Патч FX return на выход |
-| `setMonitorOutput(side, destType, destChannel)` | `routePaflToOutput()` | Патч PAFL L/R (соло-шины) на выход |
-| `restoreOutputs(outputs)` | `onMonEnableChange()` | Восстановление роутинга при выключении «Применять» |
+| `setOutputPatch(sourceB3, destType, destChannel, rightHalf?)` | `sendPlanned()` | Патч обычного источника (каналы, миксы, LR) и матриц (слоты `0x73`–`0x78`); `rightHalf` → modifier `0x10` (правая половина линк-пары) |
+| `setFxOutputPatch(fxIndex, side, destType, destChannel)` | `sendPlanned()` | Патч FX return на выход |
+| `setMonitorOutput(side, destType, destChannel)` | `sendPlanned()` | Патч PAFL L/R (соло-шины) на выход |
+| `restoreOutputs(outputs)` | `onMonEnableChange()` | Восстановление роутинга при выключении «Применять» (учитывает `rightHalf`) |
+| `clearOutputs(outputs)` | `onMonEnableChange()` | Очистка заимствованных выходов без прежнего источника |
 
 ### Типы выходов (destType)
 

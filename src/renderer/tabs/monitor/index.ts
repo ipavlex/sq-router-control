@@ -455,6 +455,12 @@ interface PlannedSend {
   kind: "bus" | "fx" | "pafl";
   /** Source bus b3 for kind "bus". */
   sourceB3?: number;
+  /**
+   * Right half of a console-linked stereo source: same master b3, but sent
+   * with output-patch modifier 0x10 instead of 0x0F. Ad-hoc pairs and mono
+   * sources use the default (0x0F).
+   */
+  rightHalf?: boolean;
   /** FX engine index / side for kind "fx". */
   fxIndex?: number;
   fxSide?: "L" | "R";
@@ -506,11 +512,21 @@ function planActiveSelection(): PlannedSend[] {
   const plan: PlannedSend[] = [];
 
   if (leftChannelB3 !== null && rightChannelB3 !== null) {
-    // A stereo pair (console-linked or ad-hoc) is patched as two separate
-    // output-patch frames: left half → L output, right half → R output. The
-    // SQ does NOT derive the right half from the master patch.
-    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
-    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rightChannelB3, sourceLabel: b3DebugLabel(rightChannelB3) });
+    const linked = getStereoPair(leftChannelB3);
+    if (linked !== null && linked[1] === rightChannelB3) {
+      // Console-linked pair = ONE ganged source. The console patches the left
+      // half with modifier 0x0F and the right half with 0x10, both naming the
+      // master b3. Captured from the console itself:
+      //   0b 0b 0d <master> 0f <L-out-1> 1a
+      //   0b 0b 0d <master> 10 <R-out-1> 1a
+      // Sending the slave channel as the source (modifier 0x0F) is ignored.
+      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
+      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3, rightHalf: true, sourceLabel: `${b3DebugLabel(leftChannelB3)} R` });
+    } else {
+      // Ad-hoc pair: two independent mono channels → one patch frame each.
+      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
+      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rightChannelB3, sourceLabel: b3DebugLabel(rightChannelB3) });
+    }
   } else if (leftChannelB3 !== null) {
     plan.push({ side: "L", dest: L, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
     plan.push({ side: "R", dest: R, kind: "bus", sourceB3: leftChannelB3, sourceLabel: b3DebugLabel(leftChannelB3) });
@@ -536,7 +552,9 @@ function planActiveSelection(): PlannedSend[] {
 function planCommand(p: PlannedSend): string {
   if (!p.dest) return "(выход не выбран)";
   const dest = `${hexByte(p.dest.destType)}:${p.dest.destChannel}`;
-  if (p.kind === "bus" && p.sourceB3 !== undefined) return `setOutputPatch(${hexByte(p.sourceB3)}, ${dest})`;
+  if (p.kind === "bus" && p.sourceB3 !== undefined) {
+    return `setOutputPatch(${hexByte(p.sourceB3)}, ${dest}, ${p.rightHalf ? "0x10" : "0x0f"})`;
+  }
   if (p.kind === "fx") return `setFxOutputPatch(${p.fxIndex}, ${p.fxSide}, ${dest})`;
   return `setMonitorOutput(${p.side}, ${dest})`;
 }
@@ -545,7 +563,7 @@ function planCommand(p: PlannedSend): string {
 async function sendPlanned(p: PlannedSend): Promise<void> {
   if (!p.dest) return;
   if (p.kind === "bus" && p.sourceB3 !== undefined) {
-    await window.sq.setOutputPatch(p.sourceB3, p.dest.destType, p.dest.destChannel);
+    await window.sq.setOutputPatch(p.sourceB3, p.dest.destType, p.dest.destChannel, p.rightHalf === true);
   } else if (p.kind === "fx" && p.fxIndex !== undefined && p.fxSide) {
     await window.sq.setFxOutputPatch(p.fxIndex, p.fxSide, p.dest.destType, p.dest.destChannel);
   } else if (p.kind === "pafl") {

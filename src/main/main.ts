@@ -631,8 +631,17 @@ class SQController {
    * sourceB3: channel address (0x00–0x2f inputs, 0x58–0x63 Mix 1-12, 0x68 Main LR).
    * destType: 0x1a Local, 0x1b ME, 0x1c SLink, 0x1d USB, 0x1e IOPort.
    * destChannel: 1-based channel number on that output bus.
+   * rightHalf: right half of a console-linked stereo source — same master b3,
+   *   output-patch modifier 0x10 instead of the default 0x0f. Confirmed on a
+   *   real SQ-5: the console patches a linked pair to two sockets as
+   *   `<master> 0f <L> 1a` and `<master> 10 <R> 1a`.
    */
-  setOutputPatch(sourceB3: number, destType: number, destChannel: number): void {
+  setOutputPatch(
+    sourceB3: number,
+    destType: number,
+    destChannel: number,
+    rightHalf = false
+  ): void {
     const ch0 = destChannel - 1;
     const destName =
       destType === 0x1a ? "Local" :
@@ -641,10 +650,11 @@ class SQController {
       destType === 0x1d ? "USB" :
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
-    const frame = this.sendPatchFrame(sourceB3, 0x0f, ch0 & 0xff, destType & 0xff);
+    const modifier = rightHalf ? 0x10 : 0x0f;
+    const frame = this.sendPatchFrame(sourceB3, modifier, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
-      msg: `Route ${b3ToLabel(sourceB3)} → ${destName} Out ${destChannel}`,
+      msg: `Route ${b3ToLabel(sourceB3)}${rightHalf ? " R" : ""} → ${destName} Out ${destChannel}`,
       raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
@@ -876,7 +886,7 @@ class SQController {
     if (out.kind === "bus") {
       const b3 = labelToB3(out.sourceLabel);
       if (b3 === null) return null;
-      return { ch: b3, modifier: 0x0f, valLo, valHi };
+      return { ch: b3, modifier: out.rightHalf ? 0x10 : 0x0f, valLo, valHi };
     }
     if (out.kind === "fx") {
       const m = /^FX(\d+)\s+([LR])$/.exec(out.sourceLabel || "");
@@ -1694,8 +1704,8 @@ function registerIpc(): void {
     controller.setPafl(b3, on);
     return true;
   });
-  ipcMain.handle("sq:setOutputPatch", (_e, sourceB3: number, destType: number, destChannel: number) => {
-    controller.setOutputPatch(sourceB3, destType, destChannel);
+  ipcMain.handle("sq:setOutputPatch", (_e, sourceB3: number, destType: number, destChannel: number, rightHalf?: boolean) => {
+    controller.setOutputPatch(sourceB3, destType, destChannel, rightHalf === true);
     return true;
   });
   ipcMain.handle("sq:setFxOutputPatch", (_e, fxIndex: number, side: "L" | "R", destType: number, destChannel: number) => {

@@ -128,6 +128,20 @@ describe("RoutingModel.handleDsp — output patch", () => {
     m.handleDsp(patchFrame(0x58, 0x0f, 1, OutputPatchDest.Local));
     assert.equal(m.snapshot().outputs.length, 2);
   });
+
+  it("decodes a linked pair's right half (modifier 0x10) from the master b3", () => {
+    const m = new RoutingModel();
+    // Captured from a real SQ-5: linked pair master b3 0x1a → Local Out 1 (L,
+    // modifier 0x0f) and Local Out 2 (R, modifier 0x10); both carry the master.
+    m.handleDsp(patchFrame(0x1a, 0x0f, 0, OutputPatchDest.Local));
+    m.handleDsp(patchFrame(0x1a, 0x10, 1, OutputPatchDest.Local));
+    const outputs = m.snapshot().outputs.sort((a, b) => a.destChannel - b.destChannel);
+    assert.equal(outputs.length, 2);
+    assert.equal(outputs[0].sourceLabel, outputs[1].sourceLabel);
+    assert.equal(outputs[0].rightHalf ?? false, false);
+    assert.equal(outputs[1].rightHalf, true);
+    assert.equal(outputs[1].destChannel, 2);
+  });
 });
 
 describe("RoutingModel.handleDsp — FX and monitor patches", () => {

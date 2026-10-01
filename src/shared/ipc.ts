@@ -55,6 +55,8 @@ export interface SnapshotOutput {
   dest: number;
   destLabel: string;
   destChannel: number;
+  /** Right half of a console-linked stereo source (output-patch modifier 0x10). */
+  rightHalf?: boolean;
 }
 
 /** Minimal (destType, destChannel) pair — identifies one physical output. */
@@ -229,7 +231,12 @@ export interface SqApi {
   cancelDiscovery(): Promise<boolean>;
   setMonitorOutput(side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   setPafl(b3: number, on: boolean): Promise<boolean>;
-  setOutputPatch(sourceB3: number, destType: number, destChannel: number): Promise<boolean>;
+  /**
+   * Patch a source to a physical output. `rightHalf` selects modifier 0x10
+   * (right half of a console-linked stereo source) instead of the default
+   * 0x0F. Both halves name the same master b3.
+   */
+  setOutputPatch(sourceB3: number, destType: number, destChannel: number, rightHalf?: boolean): Promise<boolean>;
   setFxOutputPatch(fxIndex: number, side: "L" | "R", destType: number, destChannel: number): Promise<boolean>;
   requestDump(): Promise<boolean>;
   applyRouting(data: {

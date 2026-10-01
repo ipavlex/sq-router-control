@@ -127,6 +127,8 @@ export interface OutputPatch {
   dest: number;
   destLabel: string;
   destChannel: number;
+  /** Right half of a console-linked stereo source (output-patch modifier 0x10). */
+  rightHalf?: boolean;
 }
 
 // ── Routing state model ──────────────────────────────────────────────────────
@@ -212,8 +214,9 @@ export class RoutingModel {
       return true;
     }
 
-    // OUTPUT PATCH (mixer bus → physical output): modifier 0x0f.
-    if (modifier === 0x0f) {
+    // OUTPUT PATCH (mixer bus → physical output): modifier 0x0f (left half)
+    // or 0x10 (right half of a console-linked stereo source; same master b3).
+    if (modifier === 0x0f || modifier === 0x10) {
       const sourceB3 = ch;
       const dest = valHi;
       const record: OutputPatch = {
@@ -222,6 +225,7 @@ export class RoutingModel {
         dest,
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
+        rightHalf: modifier === 0x10,
       };
       this.replaceOutput(record);
       this.updates++;

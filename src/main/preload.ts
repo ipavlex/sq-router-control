@@ -30,8 +30,13 @@ contextBridge.exposeInMainWorld("sq", {
     ipcRenderer.invoke("sq:setMonitorOutput", side, destType, destChannel),
   setPafl: (b3: number, on: boolean): Promise<boolean> =>
     ipcRenderer.invoke("sq:setPafl", b3, on),
-  setOutputPatch: (sourceB3: number, destType: number, destChannel: number): Promise<boolean> =>
-    ipcRenderer.invoke("sq:setOutputPatch", sourceB3, destType, destChannel),
+  setOutputPatch: (
+    sourceB3: number,
+    destType: number,
+    destChannel: number,
+    rightHalf?: boolean
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("sq:setOutputPatch", sourceB3, destType, destChannel, rightHalf),
   setFxOutputPatch: (fxIndex: number, side: "L" | "R", destType: number, destChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setFxOutputPatch", fxIndex, side, destType, destChannel),
   requestDump: (): Promise<boolean> => ipcRenderer.invoke("sq:requestDump"),
