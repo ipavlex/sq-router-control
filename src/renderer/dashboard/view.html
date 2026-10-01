@@ -2,7 +2,7 @@
 <section id="dash-screen" class="screen" hidden>
   <header class="topbar">
     <div class="topbar-left">
-      <span class="dot live"></span>
+      <span id="conn-dot" class="dot live"></span>
       <div>
         <div id="topbar-title" class="topbar-title">SQ</div>
         <div class="topbar-subline">
@@ -15,9 +15,18 @@
       <button id="routing-btn" class="btn ghost active" title="Роутинг">🔊 Роутинг</button>
       <button id="monitor-btn" class="btn ghost" title="Мониторинг">🎧 Монитор</button>
       <button id="log-btn" class="btn ghost" title="Открыть журнал кадров">📋 Журнал</button>
+      <button id="export-reaper-btn" class="btn ghost" title="Экспортировать шаблон треков REAPER (мультитрек через USB)">🎛 REAPER</button>
       <button id="disconnect-btn" class="btn danger">Отключиться</button>
     </div>
   </header>
+
+  <!-- Auto-reconnect indicator: shown over the dashboard when the link drops
+       and the app is retrying in the background. -->
+  <div id="reconnect-banner" class="reconnect-bar" hidden role="status" aria-live="polite">
+    <span class="spinner"></span>
+    <span id="reconnect-text" class="reconnect-text"></span>
+    <button id="reconnect-cancel" class="btn ghost" type="button">Отменить</button>
+  </div>
 
   <!-- @tab:routing -->
   <!-- @tab:log -->

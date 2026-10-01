@@ -60,6 +60,9 @@ Main LR, FX return) на конкретный физический выход п
 TRS Out продолжают нумерацию XLR: например, SQ-5 (12 XLR + TRS A = Local Out 13,
 TRS B = Local Out 14). Оба используют адрес `0x1a`.
 
+> `0x1b` ME (Mon) есть в протоколе ([`SQ-PROTOCOL.md`](SQ-PROTOCOL.md) §4.2),
+> но **в UI не используется** — селекторы L/R ограничены списком выше.
+
 ### Автоматический выбор правого выхода
 
 При выборе L-выхода R-селектор автоматически переключается на соседний
@@ -252,6 +255,20 @@ UDP-поток метров приходит на 25–50 Гц. Renderer кеш�
 | `setFxOutputPatch(fxIndex, side, destType, destChannel)` | `routeFxToOutput()` | Патч FX return на выход |
 | `setMonitorOutput(side, destType, destChannel)` | `routePaflToOutput()` | Патч PAFL L/R (соло-шины) на выход |
 | `restoreOutputs(outputs)` | `onMonEnableChange()` | Восстановление роутинга при выключении «Применять» |
+
+### Типы выходов (destType)
+
+Селекторы L/R и модальное окно safes используют только эти коды назначения:
+
+| `destType` | Выход |
+|---|---|
+| `0x1a` | Local Out / TRS Out |
+| `0x1c` | SLink Out |
+| `0x1d` | USB Out |
+| `0x1e` | I/O Port Out |
+
+`0x1b` ME (Mon) есть в протоколе ([`SQ-PROTOCOL.md`](SQ-PROTOCOL.md) §4.2),
+но **в UI не используется** (см. §3).
 
 ### Адреса источников (b3)
 

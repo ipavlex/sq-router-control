@@ -42,6 +42,10 @@
 | Порт | `#port-input` | TCP-порт, по умолчанию `51326` |
 | Подсказка | `.hint` | «Порт по умолчанию: `51326` … Порт MIDI — `51325`» |
 | «Подключиться» | `#connect-btn` (`.btn.primary`) | Запуск подключения |
+| «🔍 Найти пульты в сети» | `#discover-btn` (`.btn.ghost.full`) | Запуск сканирования локальной сети (CN-C1) |
+| «Отмена» | `#discover-cancel` (`.btn.danger.sm`) | Прерывание активного поиска (скрыта, когда поиск не идёт) |
+| Статус поиска | `#discover-status` (`.hint`) | Ход / итог / ошибка поиска |
+| Список найденных | `#discover-list` (`.discover-list`) | Найденные пульты; клик подставляет хост и порт в поля |
 | Разделитель «или» | `.divider` | Визуальное отделение демо-режима |
 | «▶ Демо-режим (без пульта)» | `#demo-btn` (`.btn.ghost.full`) | Запуск симуляции |
 | Сообщение | `#connect-msg` (`.msg`, `hidden`) | Ошибка/инфо-плашка под кнопками |
@@ -61,8 +65,9 @@
 - `type="text"`, `inputmode="decimal"`, `placeholder="192.168.1.60"`,
   `autocomplete="off"`, `spellcheck="false"`.
 - При старте приложения, если есть история, в поле подставляется первый
-  недавний хост, и поле получает фокус (`src/renderer/index.ts:16-20`).
-- Enter в поле запускает подключение (`connect/index.ts:88-90`).
+  недавний хост, и поле получает фокус (`src/renderer/index.ts`, точка входа).
+- Enter в поле запускает подключение (`connect/index.ts` → `keydown` на
+  `#ip-input`).
 
 ### Порт (`#port-input`)
 
@@ -70,21 +75,23 @@
   `title="TCP port (default 51326)"`.
 - При подключении пустое/некорректное значение превращается в `undefined` —
   main-процесс подставляет порт по умолчанию `51326`
-  (`connect/index.ts:35`, `connection.ts:51,127`).
-- Enter в поле также запускает подключение (`connect/index.ts:91-93`).
+  (`connect/index.ts` → `doConnect`, парсинг порта; `connection.ts` →
+  `SQ_TCP_PORT`, конструктор `Connection`).
+- Enter в поле также запускает подключение (`connect/index.ts` → `keydown` на
+  `#port-input`).
 
 ## 4. Поток подключения
 
-`doConnect()` (`src/renderer/connect/index.ts:33-61`):
+`doConnect()` (`src/renderer/connect/index.ts`):
 
 1. Читает и `trim()`-ит хост, парсит порт.
-2. **Валидация** `isValidHost(host)` (`utils.ts:92-100`): допускается либо
+2. **Валидация** `isValidHost(host)` (`utils.ts`): допускается либо
    корректный IPv4 (каждый октет 0–255), либо hostname
    (`[a-zA-Z0-9-]+` с точками). При ошибке — сообщение
    «Введите корректный IP-адрес или имя хоста.» и фокус на поле; подключение
    не начинается.
 3. `setLoading(true)` — кнопка «Подключиться» блокируется, добавляется спиннер,
-   подпись меняется на «Подключение…» (`utils.ts:113-127`).
+   подпись меняется на «Подключение…» (`utils.ts` → `setLoading`).
 4. `window.sq.connect(host, port)` → IPC `sq:connect` → `SQController.connect`.
 5. При успехе:
    - `state.isDemoMode = false`;
@@ -96,7 +103,8 @@
 
 ### Сообщения об ошибках подключения
 
-Тексты формируются в main-процессе (`main.ts:257-266`) и `connection.ts`:
+Тексты формируются в main-процессе (`main.ts` → `SQController.connect`) и
+`connection.ts`:
 
 | Ситуация | Текст |
 |---|---|
@@ -111,9 +119,44 @@
 Сообщения выводятся через `setMessage(text, "error")` (класс `.msg.error`,
 красный). `setMessage("")` скрывает плашку.
 
+### 4.2. Поиск пультов в сети (CN-C1)
+
+Кнопка «🔍 Найти пульты в сети» запускает **скан локальной подсети** — без
+mDNS/Bonjour и без внешних зависимостей. Логика целиком в main-процессе
+(`src/main/discovery.ts`), renderer только отображает результаты.
+
+1. `doDiscover()` (`connect/index.ts`) вызывает `window.sq.discoverConsoles()`
+   → IPC `sq:discoverConsoles` → `SQController.discover()`.
+2. `scanNetwork()` берёт /24-префиксы всех активных IPv4-интерфейсов
+   (`localSubnets()`, через `os.networkInterfaces()`; loopback и link-local
+   `169.254/16` пропускаются) и раскрывает каждый в адреса `.1`–`.254`.
+3. По каждому адресу `probeHost()` открывает TCP на порт `51326` (параллельно,
+   до 32 проб, таймаут 600 мс) и выполняет **минимальный префикс рукопожатия**:
+   meter-sub → ack → ждёт кадр версии (`sub=0x02`). Моделью считается только
+   хост, приславший кадр версии, — открытый, но «не тот» порт не попадает в
+   список.
+4. Каждая находка сразу уходит в renderer событием `sq:discovered`
+   (`onConsoleFound`), поэтому список наполняется по ходу скана. По клику на
+   строку хост и порт подставляются в `#ip-input` / `#port-input` (подключение
+   автоматически не запускается).
+5. По завершении промис возвращает `DiscoveryResult` (`found`, `scanned`,
+   `subnets`, `durationMs`, `cancelled`), и статус показывает итог. Кнопка
+   «Отмена» → `sq:cancelDiscovery` прерывает скан (`AbortController`,
+   in-flight сокеты закрываются).
+
+Error/edge cases: нет активных подсетей → «Активные локальные сети не найдены…»;
+пультов нет → «Пульты не найдены…»; ошибка — текст в `#discover-status.error`.
+В демо-режиме поиск бесполезен (пульт симулируется в приложении), но
+безвреден.
+
+Проверка без пульта: юнит-тесты `src/main/discovery.test.ts` гоняют `probeHost`
+и `scanNetwork` против фейкового SQ-TCP-сервера на loopback; `localSubnets` /
+`expandSubnet` покрыты как чистые функции. Финальная проверка — с реальным
+пультом в сети (группа C).
+
 ## 5. Поток демо-режима
 
-`doStartDemo()` (`src/renderer/connect/index.ts:12-31`):
+`doStartDemo()` (`src/renderer/connect/index.ts`):
 
 1. Защита от повторного запуска: флаг `demoStarting` + `demoBtn.disabled`.
 2. `setMessage("", "")` — очистка предыдущей ошибки.
@@ -129,10 +172,11 @@
 
 ## 6. Недавние хосты
 
-- Хранилище — `localStorage` под ключом `sq_recent_hosts` (`utils.ts:90`).
-- `addRecent(host)` (`utils.ts:137-142`): хост переносится в начало списка,
+- Хранилище — `localStorage` под ключом `sq_recent_hosts`
+  (`utils.ts` → `RECENT_KEY`).
+- `addRecent(host)` (`utils.ts`): хост переносится в начало списка,
   дубликаты удаляются, хранится максимум **6** записей.
-- `renderRecent()` (`utils.ts:144-162`): рисует чипы; клик по чипу подставляет
+- `renderRecent()` (`utils.ts`): рисует чипы; клик по чипу подставляет
   хост в `#ip-input` и ставит фокус (подключение не запускается автоматически).
 - Если история пуста, `#recent-row` скрыт.
 - Хост добавляется только при **успешном** реальном подключении; демо-режим
@@ -141,7 +185,8 @@
 ## 7. Рукопожатие с пультом
 
 Полная последовательность кадров описана в
-[`SQ-PROTOCOL.md`](SQ-PROTOCOL.md); кратко (`connection.ts:1-18`):
+[`SQ-PROTOCOL.md`](SQ-PROTOCOL.md); кратко (`connection.ts` → `Connection.connect`,
+`_openTcp`):
 
 1. UDP-сокет биндится на случайный локальный порт — приложению нужен канал
    для потока уровней.
@@ -150,7 +195,7 @@
    negotiation → subscribe-all → дополнительные подписки → flood параметров.
 4. Keepalive `sub=0x03` каждые ~1000 мс (`KEEPALIVE_INTERVAL_MS`).
 5. Общий таймаут рукопожатия — **10 000 мс**
-   (`connectTimeoutMs`, `connection.ts:129,181-184`).
+   (`connectTimeoutMs`; `connection.ts` → конструктор `Connection`, `_openTcp`).
 
 Успешное рукопожатие резолвит `VersionInfo` (модель, `fwA`, `fwB`, `build`) —
 именно эти данные показываются в шапке дашборда, а `modelSpec(model)`
@@ -159,13 +204,40 @@
 ## 8. Отключение и разрыв связи
 
 - **Ручное**: кнопка «Отключиться» (`#disconnect-btn` в топбаре дашборда) →
-  `doDisconnect()` (`connect/index.ts:63-68`): `window.sq.disconnect()`, очистка
+  `doDisconnect()` (`connect/index.ts`): `window.sq.disconnect()` (он же
+  останавливает активную серию ретраев), сброс индикатора реконнекта, очистка
   поля IP, `showScreen("connect")`.
-- **Неожиданный разрыв**: дашборд слушает `onStatus`; при `connected: false`
-  и видимом дашборде показывается экран подключения и сообщение
-  «Соединение с пультом разорвано.» (`dashboard/index.ts:38-51`).
+- **Неожиданный разрыв**: main-процесс обнаруживает разрыв уже установленного
+  сеанса и запускает **авто-переподключение** (см. §8.1). Пока идут попытки,
+  дашборд остаётся видимым, а сверху показывается индикатор
+  `#reconnect-banner`. Если переподключиться не удалось (или пользователь
+  нажал «Отменить»), показывается экран подключения с текстом ошибки
+  («Соединение с пультом разорвано.», «Не удалось переподключиться к `<host>`.»
+  или «Переподключение отменено.»).
 - При закрытии окна / выходе из приложения main-процесс вызывает
-  `controller.disconnect()` (`main.ts:1407-1414`).
+  `controller.disconnect()` (`main.ts`).
+
+### 8.1. Авто-переподключение (CN-01)
+
+Логика живёт в main-процессе (`SQController`, `src/main/main.ts`) — он владеет
+сетью. Renderer только отражает состояние.
+
+- Авто-переподключение вооружается только для **установленного** реального
+  соединения (после успешного рукопожатия). Ошибка первичного подключения
+  авто-ретраев не запускает — показывается на экране подключения.
+- Backoff: `1с → 2с → 4с → 8с → 16с → 30с → 30с → 30с`, максимум
+  **8 попыток** (`RECONNECT_MAX_ATTEMPTS`), затем сдаётся.
+- Порт/интерфейс повторной попытки — те же, что у исходного подключения.
+- Ручное подключение, демо-режим и «Отключиться» отменяют активную серию.
+- Renderer получает прогресс в `StatusPayload.reconnect`
+  (`active`, `attempt`, `maxAttempts`, `delayMs`, `error`), показывает баннер с
+  живым обратным отсчётом и кнопкой «Отменить»
+  (`window.sq.cancelReconnect()`).
+- При успехе приходит `StatusPayload` с `connected: true` и
+  `reconnected: true`; баннер скрывается, консоль заново заливает состояние.
+- Точки входа: `SQController.scheduleReconnect/attemptReconnect/cancelReconnect`,
+  IPC `sq:cancelReconnect`, `src/renderer/dashboard/index.ts`
+  (`showReconnectBar`, обработчик `onStatus`).
 
 ## 9. Состояния экрана
 
@@ -176,27 +248,32 @@
 | Ручное отключение | видим | скрыт |
 | Неожиданный разрыв | видим (+ сообщение) | скрыт |
 
-Переключение выполняет `showScreen()` (`utils.ts:164-167`).
+Переключение выполняет `showScreen()` (`utils.ts`).
 
 ## 10. Ключевые файлы
 
 | Файл | Ответственность |
 |---|---|
 | `src/renderer/connect/view.html` | Разметка экрана подключения |
-| `src/renderer/connect/index.ts` | `doConnect`, `doStartDemo`, `doDisconnect`, `doRefresh`, привязки клавиш |
+| `src/renderer/connect/index.ts` | `doConnect`, `doStartDemo`, `doDiscover`, `doDisconnect`, `doRefresh`, привязки клавиш |
 | `src/renderer/core/utils.ts` | `isValidHost`, `setMessage`, `setLoading`, `getRecent`/`addRecent`/`renderRecent`, `showScreen` |
 | `src/renderer/index.ts` | Старт: подстановка недавнего хоста, фокус |
 | `src/renderer/dashboard/index.ts` | `enterDashboard`, обработка разрыва связи |
-| `src/shared/ipc.ts` | `ConnectResult`, `VersionInfo`, `ModelSpec` |
-| `src/main/preload.ts` | Мост `window.sq.connect` / `startDemo` / `disconnect` |
-| `src/main/main.ts` | `SQController.connect`/`startDemo`, IPC `sq:connect` и др. |
+| `src/shared/ipc.ts` | `ConnectResult`, `VersionInfo`, `ModelSpec`, `DiscoveredConsole`, `DiscoveryResult` |
+| `src/main/preload.ts` | Мост `window.sq.connect` / `startDemo` / `discoverConsoles` / … |
+| `src/main/main.ts` | `SQController.connect`/`startDemo`/`discover`, IPC `sq:connect` и др. |
+| `src/main/discovery.ts` | Скан локальной подсети: `subnetsFromInterfaces`, `expandSubnet`, `probeHost`, `scanNetwork` |
 | `src/main/transport/connection.ts` | TCP-рукопожатие, порт, таймауты, keepalive |
 | `src/renderer/assets/styles.css` | Стили `.card`, `.ip-input`, `.msg`, `.recent-chip` и др. |
 
 ## 11. Ограничения
 
-- Нет автообнаружения пультов (mDNS/скан сети) — хост вводится вручную.
-- Нет автоматического переподключения при разрыве — только ручной возврат.
+- Автообнаружение пультов — есть (CN-C1, §4.2), но это **скан локальной
+  подсети /24** по TCP-порту, а не mDNS/Bonjour: пульт находится только в той же
+  подсети, что и компьютер. На macOS первый скан может запросить разрешение на
+  доступ к локальной сети.
+- Авто-переподключение при разрыве — есть (CN-01, §8.1): до 8 попыток с
+  backoff, затем ручной возврат.
 - Порт хранится не для каждого хоста, а как одно общее значение по умолчанию
   `51326`.
 - Нет выбора локального сетевого интерфейса (в `ConnectOptions` есть

@@ -19,6 +19,10 @@ export interface ElementRefs {
   connectBtn: HTMLButtonElement;
   demoBtn: HTMLButtonElement;
   connectMsg: HTMLElement;
+  discoverBtn: HTMLButtonElement;
+  discoverCancel: HTMLButtonElement;
+  discoverStatus: HTMLElement;
+  discoverList: HTMLElement;
   recentRow: HTMLElement;
   recentList: HTMLElement;
   topbarTitle: HTMLElement;
@@ -54,7 +58,10 @@ export interface ElementRefs {
   log: HTMLElement;
   clearLog: HTMLButtonElement;
   markLog: HTMLButtonElement;
+  saveLog: HTMLButtonElement;
+  logRawToggle: HTMLButtonElement;
   saveRoutingBtn: HTMLButtonElement;
+  exportReaperBtn: HTMLButtonElement;
   topbarScene: HTMLElement;
   saveFeedback: HTMLElement;
   saveModal: HTMLElement;
@@ -79,6 +86,10 @@ export interface ElementRefs {
   syncScrollBtn: HTMLButtonElement;
   editTableWrap: HTMLElement;
   activeTableWrap: HTMLElement;
+  reconnectBanner: HTMLElement;
+  reconnectText: HTMLElement;
+  reconnectCancel: HTMLButtonElement;
+  connDot: HTMLElement;
 }
 
 /** Cross-tab state shared by all renderer modules. */
@@ -110,4 +121,7 @@ export type {
   LogLevel,
   VersionInfo,
   ConnectResult,
+  ReconnectInfo,
+  DiscoveredConsole,
+  DiscoveryResult,
 } from "../../shared/ipc";

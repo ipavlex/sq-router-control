@@ -16,6 +16,10 @@ export const elementRefs: ElementRefs = {
   connectBtn: $("#connect-btn"),
   demoBtn: $("#demo-btn"),
   connectMsg: $("#connect-msg"),
+  discoverBtn: $("#discover-btn"),
+  discoverCancel: $("#discover-cancel"),
+  discoverStatus: $("#discover-status"),
+  discoverList: $("#discover-list"),
   recentRow: $("#recent-row"),
   recentList: $("#recent-list"),
   topbarTitle: $("#topbar-title"),
@@ -51,7 +55,10 @@ export const elementRefs: ElementRefs = {
   log: $("#log"),
   clearLog: $("#clear-log"),
   markLog: $("#mark-log"),
+  saveLog: $("#save-log"),
+  logRawToggle: $("#log-raw-toggle"),
   saveRoutingBtn: $("#save-routing-btn"),
+  exportReaperBtn: $("#export-reaper-btn"),
   topbarScene: $("#topbar-scene"),
   saveFeedback: $("#save-feedback"),
   saveModal: $("#save-modal"),
@@ -76,6 +83,10 @@ export const elementRefs: ElementRefs = {
   syncScrollBtn: $("#sync-scroll-btn"),
   editTableWrap: $("#edit-table-wrap"),
   activeTableWrap: $("#active-table-wrap"),
+  reconnectBanner: $("#reconnect-banner"),
+  reconnectText: $("#reconnect-text"),
+  reconnectCancel: $("#reconnect-cancel"),
+  connDot: $("#conn-dot"),
 };
 
 /** Cross-tab state shared by all renderer modules. */

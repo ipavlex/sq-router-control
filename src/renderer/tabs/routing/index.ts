@@ -1176,7 +1176,7 @@ async function downloadInputPatching(): Promise<void> {
 
 // ── sync scroll between the two routing lists ─────────────────────────
 
-let syncScrollEnabled = false;
+let syncScrollEnabled = true;
 let syncingScroll = false;
 
 /**

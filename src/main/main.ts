@@ -4,7 +4,7 @@
  * Owns the SQ TCP connection and the routing model, and bridges them to the
  * renderer over IPC. The renderer never touches the network directly.
  */
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { Connection, VersionInfo, DspFrame } from "./transport/connection";
@@ -14,7 +14,13 @@ import { modelSpec, SQModelSpec } from "./models";
 import { MetersPayload } from "./meters";
 import { DemoMetersSim, DEMO_METERS_TICK_MS } from "./demo-meters";
 import { analyzeStereoTable } from "./paramdata-diagnostics";
-import type { OutputKey } from "../shared/ipc";
+import { scanNetwork } from "./discovery";
+import type {
+  DiscoveredConsole,
+  DiscoveryResult,
+  ExportFileResult,
+  OutputKey,
+} from "../shared/ipc";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -38,6 +44,27 @@ interface DemoVariant {
 
 const Src = { Local: 0x01, SLink: 0x02, USB: 0x03 };
 const Dest = { Local: 0x1a, USB: 0x1d, SLink: 0x1c };
+
+/**
+ * Auto-reconnect tuning for unexpected connection drops. Retries use an
+ * exponential backoff (1s, 2s, 4s … capped at 30s) and give up after
+ * RECONNECT_MAX_ATTEMPTS so the user can retry manually from the connect
+ * screen. The renderer shows progress and offers a cancel button.
+ */
+const RECONNECT_MAX_ATTEMPTS = 8;
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+
+function reconnectDelay(attempt: number): number {
+  return Math.min(RECONNECT_BASE_DELAY_MS * 2 ** (attempt - 1), RECONNECT_MAX_DELAY_MS);
+}
+
+/** Space-separated lowercase hex — the log's "raw" view of a frame. */
+function hexDump(buf: Buffer): string {
+  return Array.from(buf)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join(" ");
+}
 
 const DEMO_VARIANTS: DemoVariant[] = [
   {
@@ -201,7 +228,20 @@ class SQController {
   /** Live channel state (fader/mute/gain/…) fed by DSP frames + ParamData. */
   private mixer = new MixerState();
   private host = "";
+  private port: number | undefined;
+  private localInterface = "";
   private statusTimer: NodeJS.Timeout | null = null;
+
+  /** Auto-reconnect after an unexpected drop (only for established sessions). */
+  private autoReconnect = false;
+  /** 1-based retry counter of the active reconnect sequence (0 = idle). */
+  private reconnectAttempt = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  /** Invalidates pending reconnect callbacks after cancel / manual reconnect. */
+  private reconnectGen = 0;
+
+  /** Non-null while a local-network discovery sweep is running (abort handle). */
+  private discoveryAbort: AbortController | null = null;
 
   // Demo mode state
   private demoMode = false;
@@ -235,17 +275,20 @@ class SQController {
     | { ok: true; version: VersionInfo; spec: SQModelSpec }
     | { ok: false; error: string }
   > {
+    // A manual connect supersedes any automatic reconnect sequence.
+    this.stopReconnect();
     // Tear down any previous session.
-    this.disconnect();
+    this.teardown();
 
     const trimmed = (host || "").trim();
     if (!trimmed) return Promise.resolve({ ok: false, error: "Empty host" });
 
     this.host = trimmed;
+    this.port = port;
     this.model.reset();
     this.mixer.reset();
     this.resetSceneState();
-    const conn = new Connection({ host: trimmed, port });
+    const conn = new Connection({ host: trimmed, port, localInterface: this.localInterface || undefined });
     this.conn = conn;
 
     this.wireEvents(conn);
@@ -260,6 +303,9 @@ class SQController {
         spec: modelSpec(version.model),
       }))
       .catch((err: NodeJS.ErrnoException) => {
+        // A failed initial connect never triggers auto-reconnect: the error is
+        // surfaced on the connect screen so the user can fix host/port.
+        conn.disconnect();
         const msg =
           err && err.code === "ECONNREFUSED"
             ? `Connection refused by ${trimmed}:51326. Is the mixer online and MixPad disabled?`
@@ -291,7 +337,8 @@ class SQController {
     }
   }
 
-  disconnect(): void {
+  /** Tear down the live connection and its flush timer (keeps reconnect flags). */
+  private teardown(): void {
     this.stopDemo();
     if (this.statusTimer) {
       clearInterval(this.statusTimer);
@@ -301,6 +348,205 @@ class SQController {
       this.conn.disconnect();
       this.conn = null;
     }
+  }
+
+  disconnect(): void {
+    // Manual disconnect: no auto-retry.
+    this.stopReconnect();
+    this.teardown();
+  }
+
+  // ── console discovery (CN-C1) ─────────────────────────────────────
+
+  /**
+   * Sweep the local subnet(s) for SQ consoles on the SQ TCP port. Results are
+   * streamed to the renderer via `sq:discovered`; the returned promise resolves
+   * once every candidate has been probed (or the scan is cancelled). Only one
+   * sweep runs at a time.
+   */
+  async discover(subnets?: string[], port?: number): Promise<DiscoveryResult> {
+    if (this.discoveryAbort) {
+      return {
+        ok: false,
+        subnets: [],
+        found: [],
+        scanned: 0,
+        durationMs: 0,
+        error: "Сканирование уже выполняется.",
+      };
+    }
+    const ctrl = new AbortController();
+    this.discoveryAbort = ctrl;
+    const started = Date.now();
+    this.send("sq:log", { level: "frame", msg: "Discovery: scanning local network for SQ consoles…" });
+    try {
+      const { found, scanned, subnets: swept } = await scanNetwork(
+        { subnets, port, signal: ctrl.signal },
+        (c: DiscoveredConsole) => {
+          this.send("sq:discovered", c);
+          this.send("sq:log", {
+            level: "ok",
+            msg: `Discovery: found ${c.modelName ?? "SQ"} (FW ${c.fw ?? "?"}) at ${c.host}:${c.port}`,
+          });
+        }
+      );
+      const durationMs = Date.now() - started;
+      this.send("sq:log", {
+        level: "ok",
+        msg: `Discovery: ${found.length} console(s) on ${scanned} host(s) in ${Math.round(
+          durationMs / 1000
+        )}s.`,
+      });
+      return {
+        ok: true,
+        subnets: swept,
+        found,
+        scanned,
+        durationMs,
+        cancelled: ctrl.signal.aborted,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        subnets: [],
+        found: [],
+        scanned: 0,
+        durationMs: Date.now() - started,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      this.discoveryAbort = null;
+    }
+  }
+
+  /** Abort an in-progress discovery sweep. Returns false if none is running. */
+  cancelDiscovery(): boolean {
+    if (!this.discoveryAbort) return false;
+    this.discoveryAbort.abort();
+    return true;
+  }
+
+  // ── auto-reconnect ────────────────────────────────────────────────
+
+  /** Stop and invalidate any pending reconnect sequence (no status emitted). */
+  private stopReconnect(): void {
+    this.reconnectGen++;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.autoReconnect = false;
+    this.reconnectAttempt = 0;
+  }
+
+  /**
+   * User-initiated cancel of the reconnect sequence (renderer button). Tears
+   * the dead connection down and returns the UI to the connect screen.
+   */
+  cancelReconnect(): void {
+    const wasActive = this.autoReconnect && (this.reconnectAttempt > 0 || this.reconnectTimer !== null);
+    this.stopReconnect();
+    this.teardown();
+    if (wasActive) {
+      this.send("sq:status", {
+        connected: false,
+        host: this.host,
+        reconnect: {
+          active: false,
+          attempt: 0,
+          maxAttempts: RECONNECT_MAX_ATTEMPTS,
+          delayMs: 0,
+          error: "Переподключение отменено.",
+        },
+      });
+      this.send("sq:log", { level: "warn", msg: "Auto-reconnect cancelled by user." });
+    }
+  }
+
+  /** Schedule the next reconnect attempt with exponential backoff. */
+  private scheduleReconnect(): void {
+    this.reconnectAttempt++;
+    const attempt = this.reconnectAttempt;
+
+    if (attempt > RECONNECT_MAX_ATTEMPTS) {
+      this.autoReconnect = false;
+      this.reconnectAttempt = 0;
+      const error = `Не удалось переподключиться к ${this.host}.`;
+      this.send("sq:status", {
+        connected: false,
+        host: this.host,
+        reconnect: {
+          active: false,
+          attempt: RECONNECT_MAX_ATTEMPTS,
+          maxAttempts: RECONNECT_MAX_ATTEMPTS,
+          delayMs: 0,
+          error,
+        },
+      });
+      this.send("sq:log", {
+        level: "error",
+        msg: `Auto-reconnect gave up after ${RECONNECT_MAX_ATTEMPTS} attempts.`,
+      });
+      return;
+    }
+
+    const delayMs = reconnectDelay(attempt);
+    this.send("sq:status", {
+      connected: false,
+      host: this.host,
+      reconnect: { active: true, attempt, maxAttempts: RECONNECT_MAX_ATTEMPTS, delayMs },
+    });
+    this.send("sq:log", {
+      level: "warn",
+      msg: `Reconnect attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS} in ${Math.round(delayMs / 1000)}s…`,
+    });
+
+    const gen = this.reconnectGen;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (gen !== this.reconnectGen) return;
+      this.attemptReconnect(gen);
+    }, delayMs);
+    this.reconnectTimer.unref();
+  }
+
+  /** Run one reconnect attempt against the remembered host/port. */
+  private attemptReconnect(gen: number): void {
+    const attempt = this.reconnectAttempt;
+    // Tell the UI an attempt is now in flight (no countdown).
+    this.send("sq:status", {
+      connected: false,
+      host: this.host,
+      reconnect: { active: true, attempt, maxAttempts: RECONNECT_MAX_ATTEMPTS, delayMs: 0 },
+    });
+
+    this.model.reset();
+    this.mixer.reset();
+    this.resetSceneState();
+    const conn = new Connection({
+      host: this.host,
+      port: this.port,
+      localInterface: this.localInterface || undefined,
+    });
+    this.conn = conn;
+    this.wireEvents(conn);
+
+    conn
+      .connect()
+      .then(() => {
+        // Success is announced by the connection's own "connect" handler. If the
+        // attempt was superseded in the meantime, drop the now-stale socket.
+        if (this.conn !== conn) conn.disconnect();
+      })
+      .catch((err: NodeJS.ErrnoException) => {
+        if (gen !== this.reconnectGen) return;
+        conn.disconnect();
+        this.send("sq:log", {
+          level: "warn",
+          msg: `Reconnect attempt ${attempt} failed: ${(err && err.message) || err}`,
+        });
+        if (this.autoReconnect) this.scheduleReconnect();
+      });
   }
 
   /** Current scene name, or null when no scene recall has been observed. */
@@ -340,10 +586,11 @@ class SQController {
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
     // Monitor output patch: source 0x00 = PAFL L, 0x01 = PAFL R (modifier 0x11).
-    this.sendPatchFrame(side === "L" ? 0x00 : 0x01, 0x11, ch0 & 0xff, destType & 0xff);
+    const frame = this.sendPatchFrame(side === "L" ? 0x00 : 0x01, 0x11, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
       msg: `Monitor ${srcLabel} → ${destName} Out ${destChannel}`,
+      raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
@@ -361,20 +608,21 @@ class SQController {
       b3 >= 0x58 && b3 <= 0x63 ? `Mix ${b3 - 0x58 + 1}` :
       `b3 0x${b3.toString(16)}`;
 
+    const val = on ? 0x0001 : 0x0000;
+    const frame = Buffer.from([0xf7, 0x08, 0x15, 0x0c, b3, 0x00, val & 0xff, (val >> 8) & 0xff]);
+    const entry = {
+      level: "dsp" as const,
+      msg: `PAFL ${label}: ${on ? "ON" : "OFF"}`,
+      raw: hexDump(frame),
+    };
+
     if (this.demoMode) {
-      this.send("sq:log", {
-        level: "dsp",
-        msg: `PAFL ${label}: ${on ? "ON" : "OFF"}`,
-      });
+      this.send("sq:log", entry);
       return;
     }
     if (this.conn?.connected) {
-      const val = on ? 0x0001 : 0x0000;
-      this.conn.send(Buffer.from([0xf7, 0x08, 0x15, 0x0c, b3, 0x00, val & 0xff, (val >> 8) & 0xff]));
-      this.send("sq:log", {
-        level: "dsp",
-        msg: `PAFL ${label}: ${on ? "ON" : "OFF"}`,
-      });
+      this.conn.send(frame);
+      this.send("sq:log", entry);
     }
   }
 
@@ -393,10 +641,11 @@ class SQController {
       destType === 0x1d ? "USB" :
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
-    this.sendPatchFrame(sourceB3, 0x0f, ch0 & 0xff, destType & 0xff);
+    const frame = this.sendPatchFrame(sourceB3, 0x0f, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
       msg: `Route ${b3ToLabel(sourceB3)} → ${destName} Out ${destChannel}`,
+      raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
@@ -420,10 +669,11 @@ class SQController {
       destType === 0x1d ? "USB" :
       destType === 0x1e ? "IOPort" : `0x${destType.toString(16)}`;
 
-    this.sendPatchFrame(fxIndex, side === "L" ? 0x16 : 0x17, ch0 & 0xff, destType & 0xff);
+    const frame = this.sendPatchFrame(fxIndex, side === "L" ? 0x16 : 0x17, ch0 & 0xff, destType & 0xff);
     this.send("sq:log", {
       level: "dsp",
       msg: `Route FX${fxIndex + 1} ${side} → ${destName} Out ${destChannel}`,
+      raw: hexDump(frame),
     });
     // In demo mode the model changed locally — flush so the UI reflects it.
     if (this.demoMode) {
@@ -445,10 +695,11 @@ class SQController {
       source === 0x03 ? "USB" :
       source === 0x04 ? "I/O Port" : `0x${source.toString(16)}`;
 
-    this.sendPatchFrame(sourceChannel, source, destB3, 0x20);
+    const frame = this.sendPatchFrame(sourceChannel, source, destB3, 0x20);
     this.send("sq:log", {
       level: "dsp",
       msg: `Input ${destLabel} → ${srcLabel} ${sourceChannel + 1}`,
+      raw: hexDump(frame),
     });
     // Demo: sendPatchFrame already updated the local model above. Live: the
     // mixer does not echo app-initiated input patches back on the
@@ -646,8 +897,9 @@ class SQController {
    * Send a single routing patch as a 0xF7 + 7-byte DSP frame. In demo mode
    * the frame is fed straight into the routing model instead of the network.
    */
-  private sendPatchFrame(ch: number, modifier: number, valLo: number, valHi: number): void {
+  private sendPatchFrame(ch: number, modifier: number, valLo: number, valHi: number): Buffer {
     const payload = Buffer.from([0x0b, 0x0b, 0x0d, ch, modifier, valLo, valHi]);
+    const frame = Buffer.concat([Buffer.from([0xf7]), payload]);
     if (this.demoMode) {
       this.model.handleDsp({
         ch,
@@ -658,8 +910,9 @@ class SQController {
         raw: payload,
       });
     } else if (this.conn?.connected) {
-      this.conn.send(Buffer.concat([Buffer.from([0xf7]), payload]));
+      this.conn.send(frame);
     }
+    return frame;
   }
 
   // ── Demo mode ──────────────────────────────────────────────────────
@@ -671,7 +924,9 @@ class SQController {
    */
   startDemo(): { ok: true; version: VersionInfo; spec: SQModelSpec } | { ok: false; error: string } {
     try {
-      this.stopDemo();
+      // Demo replaces any live session / reconnect sequence.
+      this.stopReconnect();
+      this.teardown();
 
       this.demoMode = true;
       this.host = "demo (simulated SQ-5)";
@@ -1056,6 +1311,8 @@ class SQController {
 
   private wireEvents(conn: Connection): void {
     let dirty = false;
+    /** True once the handshake completed for this connection. */
+    let established = false;
     const flush = (): void => {
       if (dirty) {
         dirty = false;
@@ -1063,6 +1320,8 @@ class SQController {
       }
     };
     // Throttle routing snapshots so a burst of frames doesn't flood the UI.
+    // Any previous flush timer (dropped / replaced connection) is discarded.
+    if (this.statusTimer) clearInterval(this.statusTimer);
     this.statusTimer = setInterval(flush, 120);
     this.statusTimer.unref();
 
@@ -1096,7 +1355,7 @@ class SQController {
         const hex = Array.from(d.raw.slice(0, 8))
           .map((b) => b.toString(16).padStart(2, "0"))
           .join(" ");
-        this.send("sq:log", { level: "dsp", msg: `DSP  ${hex}` });
+        this.send("sq:log", { level: "dsp", msg: `DSP  ${hex}`, raw: hexDump(d.raw) });
       }
     });
 
@@ -1187,6 +1446,7 @@ class SQController {
       this.send("sq:log", {
         level: "frame",
         msg: `Routing/config block (sub=0x10): ${payload.length} bytes received`,
+        raw: hexDump(payload),
       });
     });
 
@@ -1216,23 +1476,39 @@ class SQController {
     });
 
     conn.on("connect", (v: VersionInfo) => {
+      established = true;
+      // A restored session: remember the attempt count for the UI before reset.
+      const reconnected = this.reconnectAttempt > 0;
+      // Reset the reconnect bookkeeping and arm auto-reconnect for future drops.
+      this.stopReconnect();
+      this.autoReconnect = true;
       this.send("sq:status", {
         connected: true,
         host: this.host,
         version: v,
         spec: modelSpec(v.model),
+        reconnected,
       });
       this.send("sq:log", {
         level: "ok",
-        msg: `Connected to ${v.modelName} (FW ${v.fwA}.${v.fwB}${
+        msg: `${reconnected ? "Reconnected to" : "Connected to"} ${v.modelName} (FW ${v.fwA}.${v.fwB}${
           v.build !== undefined ? "." + v.build : ""
         }) at ${this.host}`,
       });
     });
 
     conn.on("disconnect", () => {
-      this.send("sq:status", { connected: false, host: this.host });
       this.send("sq:log", { level: "warn", msg: "Disconnected from mixer." });
+      // Stale connection being replaced/torn down — ignore.
+      if (this.conn !== conn) return;
+      // A handshake that never completed is handled by the connect() callback;
+      // don't emit a drop status that would dismiss the reconnect UI.
+      if (!established) return;
+      if (this.autoReconnect) {
+        this.scheduleReconnect();
+      } else {
+        this.send("sq:status", { connected: false, host: this.host });
+      }
     });
 
     // Live input meters streamed over UDP (~25-50 packets/s). The renderer
@@ -1268,6 +1544,7 @@ class SQController {
         this.send("sq:log", {
           level: "frame",
           msg: `Meter packet: id=${idStr} body=${p.len}B${p.decoded ? "" : " (undecoded)"}${sample}${hot}${changes}`,
+          raw: p.raw ? hexDump(p.raw) : undefined,
         });
         // First sight of an undecoded shape — keep one raw datagram next to
         // the other diagnostics so the packet layout can be analyzed offline.
@@ -1399,6 +1676,14 @@ function registerIpc(): void {
     controller.disconnect();
     return true;
   });
+  ipcMain.handle("sq:cancelReconnect", () => {
+    controller.cancelReconnect();
+    return true;
+  });
+  ipcMain.handle("sq:discoverConsoles", (_e, subnets?: string[], port?: number) =>
+    controller.discover(subnets, port)
+  );
+  ipcMain.handle("sq:cancelDiscovery", () => controller.cancelDiscovery());
   ipcMain.handle("sq:getSnapshot", () => controller.snapshot());
   ipcMain.handle("sq:demoRefresh", () => controller.demoRefresh());
   ipcMain.handle("sq:setMonitorOutput", (_e, side: "L" | "R", destType: number, destChannel: number) => {
@@ -1435,6 +1720,32 @@ function registerIpc(): void {
     controller.setInputPatch(destB3, source, sourceChannel);
     return true;
   });
+  ipcMain.handle(
+    "sq:exportFile",
+    async (
+      _e,
+      content: string,
+      defaultFileName: string,
+      filterName: string,
+      extension: string
+    ): Promise<ExportFileResult> => {
+      const options = {
+        title: "Сохранить файл",
+        defaultPath: defaultFileName,
+        filters: [{ name: filterName, extensions: [extension] }],
+      };
+      const res = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, options)
+        : await dialog.showSaveDialog(options);
+      if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+      try {
+        await fs.promises.writeFile(res.filePath, content, "utf8");
+        return { ok: true, path: res.filePath };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  );
   ipcMain.handle("sq:getStatus", () => ({
     connected: controller.connected,
     version: controller.version,

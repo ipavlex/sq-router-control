@@ -5,6 +5,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   ConnectResult,
+  DiscoveredConsole,
+  DiscoveryResult,
+  ExportFileResult,
   LogPayload,
   MetersPayload,
   ModelSpec,
@@ -17,6 +20,10 @@ contextBridge.exposeInMainWorld("sq", {
   connect: (host: string, port?: number): Promise<ConnectResult> =>
     ipcRenderer.invoke("sq:connect", host, port),
   disconnect: (): Promise<boolean> => ipcRenderer.invoke("sq:disconnect"),
+  cancelReconnect: (): Promise<boolean> => ipcRenderer.invoke("sq:cancelReconnect"),
+  discoverConsoles: (subnets?: string[], port?: number): Promise<DiscoveryResult> =>
+    ipcRenderer.invoke("sq:discoverConsoles", subnets, port),
+  cancelDiscovery: (): Promise<boolean> => ipcRenderer.invoke("sq:cancelDiscovery"),
   getSnapshot: (): Promise<SnapshotPayload> => ipcRenderer.invoke("sq:getSnapshot"),
   demoRefresh: (): Promise<SnapshotPayload> => ipcRenderer.invoke("sq:demoRefresh"),
   setMonitorOutput: (side: "L" | "R", destType: number, destChannel: number): Promise<boolean> =>
@@ -40,6 +47,13 @@ contextBridge.exposeInMainWorld("sq", {
     ipcRenderer.invoke("sq:clearOutputs", outputs),
   setInputPatch: (destB3: number, source: number, sourceChannel: number): Promise<boolean> =>
     ipcRenderer.invoke("sq:setInputPatch", destB3, source, sourceChannel),
+  exportFile: (
+    content: string,
+    defaultFileName: string,
+    filterName: string,
+    extension: string
+  ): Promise<ExportFileResult> =>
+    ipcRenderer.invoke("sq:exportFile", content, defaultFileName, filterName, extension),
   startDemo: (): Promise<ConnectResult> => ipcRenderer.invoke("sq:startDemo"),
   getStatus: (): Promise<StatusPayload> => ipcRenderer.invoke("sq:getStatus"),
   onStatus: (cb: (p: StatusPayload) => void): (() => void) => {
@@ -51,6 +65,11 @@ contextBridge.exposeInMainWorld("sq", {
     const h = (_e: unknown, p: SnapshotPayload) => cb(p);
     ipcRenderer.on("sq:routing", h);
     return () => ipcRenderer.off("sq:routing", h);
+  },
+  onConsoleFound: (cb: (c: DiscoveredConsole) => void): (() => void) => {
+    const h = (_e: unknown, c: DiscoveredConsole) => cb(c);
+    ipcRenderer.on("sq:discovered", h);
+    return () => ipcRenderer.off("sq:discovered", h);
   },
   onLog: (cb: (p: LogPayload) => void): (() => void) => {
     const h = (_e: unknown, p: LogPayload) => cb(p);
