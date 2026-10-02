@@ -4,7 +4,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { BufferReader } from "./buffer";
+import { BufferReader } from "../buffer";
 
 describe("BufferReader", () => {
   it("writes a u8 and reads it back", () => {

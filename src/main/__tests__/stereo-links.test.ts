@@ -11,7 +11,7 @@ import {
   decodeStereoPairs,
   pairEncoding,
   readStereoEntry,
-} from "./stereo-links";
+} from "../stereo-links";
 
 const FLAGS_LEFT = 0x0f;
 const FLAGS_RIGHT_A = 0x10;

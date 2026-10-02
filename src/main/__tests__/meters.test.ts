@@ -16,7 +16,7 @@ import {
   meterSamplePreview,
   rawToDb,
   resetMeters,
-} from "./meters";
+} from "../meters";
 
 const FLOOR = 0x1201;
 const ZERO_DB = 0x8000;

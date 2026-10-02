@@ -10,8 +10,8 @@ import {
   wireToHpfHz,
   wireToPan,
   wireToTrimDb,
-} from "./state";
-import type { DspFrame } from "./transport/connection";
+} from "../state";
+import type { DspFrame } from "../transport/connection";
 
 /** Build a DSP frame with the given register fields. */
 function dsp(

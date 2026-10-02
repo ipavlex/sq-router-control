@@ -12,8 +12,8 @@ import {
   RoutingModel,
   b3ToLabel,
   labelToB3,
-} from "./routing";
-import type { DspFrame } from "./transport/connection";
+} from "../routing";
+import type { DspFrame } from "../transport/connection";
 
 /** Build a routing DSP frame for the given payload fields. */
 function patchFrame(ch: number, modifier: number, valLo: number, valHi: number): DspFrame {

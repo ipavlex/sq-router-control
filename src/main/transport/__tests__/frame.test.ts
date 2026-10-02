@@ -15,7 +15,7 @@ import {
   encodeMeterSub,
   encodeTypeReq,
   encodeSubscribeAll,
-} from "./frame";
+} from "../frame";
 
 /** DSP frame on the wire: 0xF7 + 7 payload bytes (8 total). */
 function dspFrame(payload: number[]): Buffer {

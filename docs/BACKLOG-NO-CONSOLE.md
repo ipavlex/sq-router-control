@@ -168,8 +168,8 @@
   - Источник: `SQ-PROTOCOL.md` §8.8 (подсказка про сборку тестовых буферов).
   - Результат: подключён встроенный раннер `node:test`, запускаемый через `tsx`
     (`npm test` → `node --import tsx --test "src/**/*.test.ts"`; добавлен
-    единственный devDependency `tsx`). Тесты лежат рядом с модулями как
-    `*.test.ts` и не попадают в webpack-сборку (явные entry-поинты).
+    единственный devDependency `tsx`). Тесты лежат в папках `__tests__` рядом
+    с модулями и не попадают в webpack-сборку (явные entry-поинты).
   - Покрытие (100 тестов): `transport/buffer.ts`, `transport/frame.ts`
     (`Framer`: split/partial/resync/DSP/0x7F-0xF7), `meters.ts`
     (`rawToDb`, `meterBody`, `decodeMeterMessage` 0x06/0x17/0x18 + merge,
@@ -179,10 +179,10 @@
     stereo-фильтр, snapshot/reset), `state.ts` (конвертеры, все регистры
     `handleDsp`, snapshot/reset). Тестовые UDP-пакеты собираются через
     `Buffer.concat([header, body])` (§8.8).
-  - Файлы: `package.json`, `src/main/transport/buffer.test.ts`,
-    `src/main/transport/frame.test.ts`, `src/main/meters.test.ts`,
-    `src/main/stereo-links.test.ts`, `src/main/routing.test.ts`,
-    `src/main/state.test.ts`.
+  - Файлы: `package.json`, `src/main/transport/__tests__/buffer.test.ts`,
+    `src/main/transport/__tests__/frame.test.ts`,
+    `src/main/__tests__/meters.test.ts`, `src/main/__tests__/stereo-links.test.ts`,
+    `src/main/__tests__/routing.test.ts`, `src/main/__tests__/state.test.ts`.
   - Проверка: `npm test` — 100/100 зелёные без пульта; `npm run typecheck` и
     `npm run build` — зелёные.
   - Доки: `AGENTS.md` §2/§7 (команда `npm test`, «автотестов нет» → покрытие
@@ -238,7 +238,7 @@
       чётные слоты (`i*2`). Дамп даёт Mtx1=«MainPA», Mtx2=«FrntFl»,
       Mtx3=«YouTMx»; стерео-пары с общим именем на обоих слотах — те же
       подписи. Роутинг кнопок (пары слотов) не менялся — это MON-B5.
-      Тесты: `matrix-names.test.ts` (4 кейса).
+      Тесты: `src/renderer/tabs/monitor/__tests__/matrix-names.test.ts` (4 кейса).
     - **Группы отложены по решению.** Справочник SQ (`allen-heath-sq-tools`,
       `FEATURES.md` §Address Space) даёт **4 группы** b3 `0x48–0x4b`
       (отдельные шины, не 12 миксов `0x58–0x63`), но UI/роутинг групп пока
@@ -275,7 +275,7 @@
     onConsoleFound`, на экране подключения — кнопка «🔍 Найти пульты в сети»,
     статус, список с потоковым пополнением и кнопка «Отмена»; клик по находке
     подставляет хост/порт.
-  - Файлы: `src/main/discovery.ts` (+`discovery.test.ts`), `src/shared/ipc.ts`,
+  - Файлы: `src/main/discovery.ts` (+`src/main/__tests__/discovery.test.ts`), `src/shared/ipc.ts`,
     `src/main/preload.ts`, `src/main/main.ts`, `src/renderer/connect/*`,
     `src/renderer/core/{types,utils}.ts`, `src/renderer/assets/styles.css`.
   - Проверка: `npm test` — 113/113 (из них 13 новых: fake SQ-сервер на loopback

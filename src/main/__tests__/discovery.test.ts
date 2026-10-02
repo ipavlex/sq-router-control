@@ -14,8 +14,8 @@ import {
   probeHost,
   scanNetwork,
   subnetsFromInterfaces,
-} from "./discovery";
-import { Framer, Sub, encodeFrame } from "./transport/frame";
+} from "../discovery";
+import { Framer, Sub, encodeFrame } from "../transport/frame";
 
 /**
  * Wrap a server so close() also destroys any still-open connections. A paused

@@ -3,7 +3,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { matrixButtonLabels } from "./matrix-names";
+import { matrixButtonLabels } from "../matrix-names";
 
 describe("matrixButtonLabels", () => {
   it("keeps consecutively named mono slots without skipping", () => {
