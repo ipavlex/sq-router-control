@@ -21,7 +21,8 @@
 Точки входа в коде:
 - renderer: `src/renderer/connect/view.html`, `src/renderer/connect/index.ts`;
 - общие помощники: `src/renderer/core/utils.ts`;
-- main-процесс: `src/main/main.ts` (`SQController.connect`, `startDemo`),
+- main-процесс: `src/main/main.ts` (`SQController.connect`),
+  `src/main/demo.ts` (`DemoSession` — демо-режим),
   `src/main/transport/connection.ts` (TCP-рукопожатие).
 
 ## 2. Интерфейс
@@ -160,7 +161,8 @@ Error/edge cases: нет активных подсетей → «Активны�
 
 1. Защита от повторного запуска: флаг `demoStarting` + `demoBtn.disabled`.
 2. `setMessage("", "")` — очистка предыдущей ошибки.
-3. `window.sq.startDemo()` → `SQController.startDemo()`: поднимает
+3. `window.sq.startDemo()` → `SQController.startDemo()` (`main.ts`) →
+   `DemoSession.start()` (`src/main/demo.ts`): поднимает
    симулированный SQ-5 (FW 1.9.4), наполняет модель шоу, запускает начальный
    burst снапшотов и поток метров.
 4. При успехе: `state.isDemoMode = true`, `enterDashboard(..., "demo")`,
@@ -261,7 +263,8 @@ Error/edge cases: нет активных подсетей → «Активны�
 | `src/renderer/dashboard/index.ts` | `enterDashboard`, обработка разрыва связи |
 | `src/shared/ipc.ts` | `ConnectResult`, `VersionInfo`, `ModelSpec`, `DiscoveredConsole`, `DiscoveryResult` |
 | `src/main/preload.ts` | Мост `window.sq.connect` / `startDemo` / `discoverConsoles` / … |
-| `src/main/main.ts` | `SQController.connect`/`startDemo`/`discover`, IPC `sq:connect` и др. |
+| `src/main/main.ts` | `SQController.connect`/`discover`, IPC `sq:connect`, `sq:startDemo`/`sq:demoRefresh` и др. |
+| `src/main/demo.ts` | `DemoSession` — симуляция демо-режима: шоу, burst, live-изменения, метры, реколл сцен |
 | `src/main/discovery.ts` | Скан локальной подсети: `subnetsFromInterfaces`, `expandSubnet`, `probeHost`, `scanNetwork` |
 | `src/main/transport/connection.ts` | TCP-рукопожатие, порт, таймауты, keepalive |
 | `src/renderer/assets/styles.css` | Стили `.card`, `.ip-input`, `.msg`, `.recent-chip` и др. |

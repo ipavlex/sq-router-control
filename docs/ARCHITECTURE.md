@@ -61,8 +61,9 @@ UDP-метры ──► decodeMeterMessage ──► IPC "sq:meters" ───�
 ```
 src/
 ├── main/                     # main-процесс Electron
-│   ├── main.ts               # окно, IPC, SQController (подключение, демо, сцены)
+│   ├── main.ts               # окно, IPC, SQController (подключение, сцены)
 │   ├── preload.ts            # мост window.sq (contextBridge)
+│   ├── demo.ts               # DemoSession — симуляция демо-режима (шоу, burst, live, метры)
 │   ├── discovery.ts          # скан локальной сети для автообнаружения пультов (CN-C1)
 │   ├── models.ts             # спецификации SQ-5/6/7 и физические I/O
 │   ├── routing.ts            # декодер патч-кадров + RoutingModel
@@ -226,6 +227,7 @@ universal, подпись кода отключена (`identity: null`). Окн
 | `stereo-links.ts` | Декодер таблицы стерео-линков (офсет 81548, шаг 4 Б, два варианта кодирования A/B) |
 | `paramdata-diagnostics.ts` | `analyzeStereoTable` — отчёт и поиск таблицы при смене прошивки |
 | `meters.ts` | Декодер UDP-метров, `decodeMeterMessage`, кодировка dBFS, инвентарь/диффы пакетов |
+| `demo.ts` | `DemoSession` — полностью симулированный SQ-5: `DEMO_VARIANTS`/`DEMO_SCENE_NAMES`, сев состояния, стартовый burst, live-симуляция, реколл сцен (`start`/`stop`/`refresh`) |
 | `demo-meters.ts` | `DemoMetersSim` — синтетический поток метров для демо (тик 200 мс) |
 | `transport/frame.ts` | Формат кадров, `Sub`-типы, `Framer` (ресемплинг потока), энкодеры |
 | `transport/buffer.ts` | `BufferReader` — little-endian чтение/запись, null-terminated строки |
@@ -351,19 +353,23 @@ universal, подпись кода отключена (`identity: null`). Окн
 
 ## 11. Демо-режим
 
-`SQController.startDemo()` (`main.ts`) поднимает полностью
-симулированный SQ-5 (FW 1.9.4) без сети:
+Симуляция целиком живёт в `DemoSession` (`src/main/demo.ts`); `main.ts`
+содержит только IPC-обёртки `SQController.startDemo()` / `demoRefresh()`,
+которые сбрасывают live-сессию и передают `DemoSession` общие `RoutingModel` /
+`MixerState` через `DemoHost`. Без сети поднимается полностью симулированный
+SQ-5 (FW 1.9.4):
 
-- модель и `MixerState` наполняются правдоподобным шоу (`seedDemoMixerState`);
+- модель и `MixerState` наполняются правдоподобным шоу (`seedMixerState`);
 - начальный бурст: 5 фаз по ~50 мс с растущими снапшотами (имена, патчи,
   стерео-пары, аутпатчи, routing-блок), затем `sq:initialState`;
-- периодическая симуляция live-изменений каждые 4.5 с;
+- периодическая симуляция live-изменений каждые 4.5 с (`startSimulation`);
 - поток метров `DemoMetersSim` (~5 пакетов/с, тик 200 мс).
 
-`demoRefresh()` (кнопка «Обновить» в демо) пересобирает **другой** вариант
-роутинга из `DEMO_VARIANTS` и циклически реколлит сцену. Демо и реальное
-подключение взаимоисключающи: `connect()` вызывает `stopDemo()`, `startDemo()`
-вызывает `stopDemo()`.
+`DemoSession.refresh()` (кнопка «Обновить» в демо, IPC `sq:demoRefresh`)
+пересобирает **другой** вариант роутинга из `DEMO_VARIANTS` и циклически
+реколлит сцену. Демо и реальное подключение взаимоисключающи: `teardown()`
+(вызывается из `connect()`/`disconnect()`) останавливает демо, а `startDemo()`
+сначала сбрасывает live-сессию.
 
 ## 12. Определение активной сцены
 
