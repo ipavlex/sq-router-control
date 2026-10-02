@@ -1087,6 +1087,9 @@ class SQController {
       0x5e: "Wedge", 0x5f: "Foldb",
       0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
       0x62: "Spill", 0x63: "Spare",
+      // Matrix slots 1-3 (b3 0x73-0x75), named consecutively like the reference
+      // SQ-5 dump — three mono matrices share the three Mtx buttons (MON-B6).
+      0x73: "MainPA", 0x74: "FrntFl", 0x75: "YouTMx",
     };
 
     // Each phase mutates the model, then a fresh snapshot is flushed to the UI.

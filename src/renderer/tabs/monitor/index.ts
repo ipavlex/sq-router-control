@@ -21,6 +21,7 @@
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
+import { matrixButtonLabels } from "./matrix-names";
 import type { SnapshotInput, SnapshotOutput, MetersPayload, OutputKey } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 
@@ -799,6 +800,7 @@ function buildFxButtons(): void {
   // Matrix sources: 3 stereo matrices (slot pairs at b3 0x73-0x78) — same
   // row, after the FX returns. First matrix starts a new group. L slot → L
   // output, R slot → R output on click.
+  const matrixLabels = matrixButtonLabels(lastMatrixNames);
   for (let i = 0; i < MATRIX_COUNT; i++) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -812,7 +814,7 @@ function buildFxButtons(): void {
     btn.appendChild(numEl);
     const nameEl = document.createElement("span");
     nameEl.className = "mtx-btn-name";
-    nameEl.textContent = lastMatrixNames[i * 2] ?? "";
+    nameEl.textContent = matrixLabels[i] ?? "";
     btn.appendChild(nameEl);
     btn.addEventListener("click", () => onMatrixClick(i, btn));
     container.appendChild(btn);
@@ -866,7 +868,7 @@ const MATRIX_COUNT = 3;
 /** Index of the currently selected matrix (0-based), or null. */
 let activeMatrixIndex: number | null = null;
 
-/** Latest matrix slot names (index 0 = slot Matrix1-L), from the snapshot. */
+/** Latest matrix slot names (index 0 = slot Matrix1-L, i.e. b3 0x73), from the snapshot. */
 let lastMatrixNames: string[] = [];
 
 /** b3 of the L slot of matrix index (0-based); the R slot follows at +1. */
@@ -905,15 +907,17 @@ async function onMatrixClick(matrixIndex: number, btn: HTMLButtonElement): Promi
 
 /**
  * Update only the names of the existing matrix buttons (without rebuilding
- * the DOM, so the active highlight survives routing updates). A stereo
- * matrix shares its name across both slots — the L slot's name is shown.
+ * the DOM, so the active highlight survives routing updates). Slot names are
+ * collapsed and handed out in order (see `matrixButtonLabels`) so a name on
+ * an odd (R) slot is not dropped.
  */
 export function updateMatrixNames(names: string[]): void {
   lastMatrixNames = names;
+  const labels = matrixButtonLabels(names);
   for (const btn of elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".mtx-btn")) {
     const mtxIdx = Number(btn.dataset.mtx);
     const nameEl = btn.querySelector(".mtx-btn-name");
-    if (nameEl) nameEl.textContent = names[mtxIdx * 2] ?? "";
+    if (nameEl) nameEl.textContent = labels[mtxIdx] ?? "";
   }
 }
 

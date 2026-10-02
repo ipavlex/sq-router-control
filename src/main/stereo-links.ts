@@ -189,9 +189,9 @@ export function decodeMixStereoPairs(payload: Buffer): number[][] {
 //
 // The link region also carries encoding-A entries for non-input objects:
 // `[b3][0x0f][tail] [b3][0x10][tail]` marks b3 as the master of a stereo link.
-// On the reference console dump this yields matrix buses 0x73/0x74/0x75 (all
-// three matrices stereo), matching the console's actual configuration. Filtered
-// to bus addresses only — input links are decoded separately above.
+// On the reference console dump this yields Main LR (0x68) and matrix slots
+// 0x73/0x74 — NOT 0x75. Filtered to bus addresses only — input links are
+// decoded separately above.
 
 /** Bus b3 addresses in the link table (mixes, Main LR, matrix slots). */
 function isBusB3(t: number): boolean {
