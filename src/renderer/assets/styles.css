@@ -836,10 +836,15 @@ h2.stereo-diff:hover::after {
   z-index: 1;
 }
 
+/* One shared row height for Input Patching and Active Patching so the two
+   tables line up row-for-row. The line-height below also sets the height of
+   the editable rows: the .patch-select controls are exactly this tall (see
+   `.patch-select`), so a plain text row and a row full of selects match. */
 .route-table tbody td {
-  padding: 9px 16px;
+  padding: 7px 16px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--text);
+  line-height: 26px;
 }
 
 .route-table tbody tr:last-child td {
@@ -1046,7 +1051,11 @@ h2.stereo-diff:hover::after {
   color: var(--text);
   font-family: var(--mono);
   font-size: 12px;
-  padding: 5px 22px 5px 8px;
+  /* Block removes the inline-baseline gap; the fixed height matches the
+     shared row line-height (26px) so edit rows equal Active Patching rows. */
+  display: block;
+  height: 26px;
+  padding: 0 22px 0 8px;
   outline: none;
   cursor: pointer;
   width: 100%;
