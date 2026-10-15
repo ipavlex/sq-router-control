@@ -35,6 +35,8 @@ describe("b3ToLabel", () => {
     assert.equal(b3ToLabel(0x30), "St In 1");
     assert.equal(b3ToLabel(0x37), "DCA 1");
     assert.equal(b3ToLabel(0x40), "FX 1");
+    assert.equal(b3ToLabel(0x48), "Group 1");
+    assert.equal(b3ToLabel(0x4b), "Group 4");
     assert.equal(b3ToLabel(0x58), "Mix 1");
     assert.equal(b3ToLabel(0x68), "Main LR");
     assert.equal(b3ToLabel(0x73), "Matrix 1 L");
@@ -184,18 +186,23 @@ describe("RoutingModel.handleDsp — non-patch frames", () => {
 });
 
 describe("RoutingModel — names, stereo pairs and reset", () => {
-  it("exposes mix / FX / matrix names in bus order", () => {
+  it("exposes mix / FX / matrix / group names in bus order", () => {
     const m = new RoutingModel();
     m.setChannelName(0x58, "Drums");
     m.setChannelName(0x40, "Hall");
     m.setChannelName(0x73, "MTX A");
+    m.setChannelName(0x48, "Vocals");
     const snap = m.snapshot();
     assert.equal(snap.mixNames[0], "Drums");
     assert.equal(snap.fxNames[0], "Hall");
     assert.equal(snap.matrixNames[0], "MTX A");
+    assert.equal(snap.groupNames[0], "Vocals");
     assert.equal(snap.mixNames.length, 12);
     assert.equal(snap.fxNames.length, 4);
     assert.equal(snap.matrixNames.length, 6);
+    assert.equal(snap.groupNames.length, 4);
+    // Unnamed buses come through as empty strings, not undefined.
+    assert.equal(snap.groupNames[3], "");
   });
 
   it("filters stereo pairs to contiguous even/odd addresses", () => {

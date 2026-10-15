@@ -24,10 +24,12 @@ import {
   BUS_MODE_OFFSET,
   MIX_B3_FIRST,
   MIX_BUS_COUNT,
+  isBusAddress,
 } from "./stereo-links";
 
 /** Human label for a bus b3. */
 function busLabel(b3: number): string {
+  if (b3 >= 0x48 && b3 <= 0x4b) return `Group ${b3 - 0x47}`;
   if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x57}`;
   if (b3 === 0x68) return "Main LR";
   if (b3 >= 0x73 && b3 <= 0x78) return `Matrix slot ${b3 - 0x72}`;
@@ -60,6 +62,89 @@ function busModeBlock(payload: Buffer): string {
       linked.map((b) => `${busLabel(b)} (0x${b.toString(16)})`).join(", ") || "none"
     }`
   );
+  return lines.join("\n");
+}
+
+/** Group bus blocks (b3 0x48-0x4b): name, mode byte +331, flags +332. */
+function groupBlockSection(payload: Buffer): string {
+  const lines: string[] = [];
+  lines.push("--- Group buses (b3 0x48-0x4b) ---");
+  for (let i = 0; i < 4; i++) {
+    const b3 = 0x48 + i;
+    const blk = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE;
+    if (blk + CHANNEL_BLOCK_STRIDE > payload.length) {
+      lines.push(`  Group ${i + 1}: block beyond payload`);
+      continue;
+    }
+    const nameEnd = payload.indexOf(0x00, blk);
+    const name = payload
+      .slice(blk, nameEnd < 0 || nameEnd > blk + 16 ? blk + 16 : nameEnd)
+      .toString("ascii")
+      .trimEnd();
+    lines.push(
+      `  Group ${i + 1} (b3 0x${b3.toString(16)} @ ${blk}): name="${name}" ` +
+        `+331=${readBusMode(payload, b3) ?? "?"} +332=0x${payload[blk + 332]
+          .toString(16)
+          .padStart(2, "0")}`
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Dump the regions where bus stereo links live. The input table at 81548 does
+ * NOT cover buses: their encoding-A pairs (`[t][0f] [t][10]`) sit in separate
+ * regions (~81290-82960 on the reference SQ-5 dump). Every 4-byte entry of a
+ * region around a found pair is printed so a controlled dump (toggle one
+ * matrix / group on the console) immediately reveals the mode-field layout.
+ */
+function busLinkRegions(payload: Buffer): string {
+  // Offsets of encoding-A bus pairs (same pattern as decodeLinkedBuses,
+  // but keeping the offsets).
+  const pairAt: number[] = [];
+  for (let o = 0; o + 8 <= payload.length; o++) {
+    const t = payload.readUInt16LE(o);
+    if (t === 0 || !isBusAddress(t)) continue;
+    if (
+      payload.readUInt16LE(o + 4) === t &&
+      payload[o + 2] === 0x0f &&
+      payload[o + 6] === 0x10
+    ) {
+      pairAt.push(o);
+    }
+  }
+  const lines: string[] = [];
+  lines.push("--- Bus link regions (encoding-A pairs with bus targets) ---");
+  if (pairAt.length === 0) {
+    lines.push("  none found");
+    return lines.join("\n");
+  }
+  // Merge nearby pair offsets into regions (within 512 bytes of each other).
+  const regions: Array<{ start: number; end: number }> = [];
+  for (const o of pairAt) {
+    const last = regions[regions.length - 1];
+    if (last && o - last.end <= 512) last.end = o + 8;
+    else regions.push({ start: o, end: o + 8 });
+  }
+  for (const r of regions) {
+    // Widen the dump to whole 4-byte entries around the region.
+    const start = Math.max(0, Math.floor(r.start / 4) * 4 - 8 * 4);
+    const end = Math.min(payload.length, Math.ceil(r.end / 4) * 4 + 8 * 4);
+    lines.push(`  region @${start}..${end}:`);
+    for (let off = start; off + 4 <= end; off += 4) {
+      const target = payload.readUInt16LE(off);
+      const flags = payload[off + 2];
+      const tail = payload[off + 3];
+      if (target === 0 && flags === 0) continue;
+      const tag =
+        flags === 0x0f || flags === 0x10 ? ` (${busLabel(target)})` : "";
+      lines.push(
+        `    @${off}: target=0x${target.toString(16).padStart(2, "0")} ` +
+          `flags=0x${flags.toString(16).padStart(2, "0")} ` +
+          `tail=0x${tail.toString(16).padStart(2, "0")}${tag}`
+      );
+    }
+  }
   return lines.join("\n");
 }
 
@@ -206,6 +291,10 @@ export function analyzeStereoTable(payload: Buffer): StereoDiagnostics {
   }
   parts.push("");
   parts.push(busModeBlock(payload));
+  parts.push("");
+  parts.push(groupBlockSection(payload));
+  parts.push("");
+  parts.push(busLinkRegions(payload));
   parts.push("");
   parts.push("Raw blob: paramdata-dump.bin (same folder).");
   return {

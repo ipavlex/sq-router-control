@@ -106,6 +106,8 @@ export interface SnapshotPayload {
    * stereo matrices occupy slot pairs: Matrix N = indexes 2(N-1), 2(N-1)+1.
    */
   matrixNames?: string[];
+  /** Group bus names 1-4 (index 0 = Group 1, b3 0x48-0x4b). */
+  groupNames?: string[];
   updates: number;
   routingBlockBytes: number | null;
   /** Name of the console's currently-active scene, if known. */

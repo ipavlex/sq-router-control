@@ -14,6 +14,11 @@
  * same L/R pattern: the matrix's L slot patches into the L output, the R
  * slot into the R output (regular output-patch frames, like mixes).
  *
+ * Group buses (Group 1-4, b3 0x48-0x4b) are separate mono audio buses
+ * (subgroups); a group click routes it to BOTH L/R outputs like a mono mix.
+ * Group names come from the snapshot (groupNames, ParamData name blocks).
+ * No meter: group buses are not present in the decoded meter packets (0x18).
+ *
  * Console stereo-linked pairs are patched as two explicit output-patch
  * frames: the left channel into the L output, the right channel into the R
  * output. The SQ does not derive the right half from the master patch, so
@@ -673,6 +678,26 @@ export function updateMixNames(names: string[]): void {
   }
 }
 
+/** Group bus addresses (b3 0x48-0x4b → Group 1-4). */
+const GROUP_B3_FIRST = 0x48;
+const GROUP_COUNT = 4;
+
+/** Latest group names (index 0 = Group 1) — re-applied when buttons are rebuilt. */
+let lastGroupNames: string[] = [];
+
+/**
+ * Update only the names of the existing group buttons (in place — no DOM
+ * rebuild, so the active highlight survives, same as updateMixNames).
+ */
+export function updateGroupNames(names: string[]): void {
+  lastGroupNames = names;
+  for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".grp-btn")) {
+    const idx = Number(btn.dataset.b3) - GROUP_B3_FIRST;
+    const nameEl = btn.querySelector(".mix-btn-name");
+    if (nameEl) nameEl.textContent = names[idx] ?? "";
+  }
+}
+
 /**
  * Apply the stereo mix pairs decoded from ParamData (byte +331 of each mix's
  * channel block, index 0 = Mix 1). Rebuilds the mix buttons only when the set
@@ -714,6 +739,27 @@ export function buildMixButtons(): void {
     nameEl.textContent = lastMixNames[mixIdx] ?? "";
     btn.appendChild(nameEl);
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
+    container.appendChild(btn);
+  }
+
+  // Group buses 1-4 (b3 0x48-0x4b): separate mono subgroups routed to BOTH
+  // L/R outputs like a mono mix (shared toggleMixRoute path). No meter bars —
+  // group buses are not present in the decoded meter packets (0x18), so
+  // applyMeters skips them automatically (no .ch-meter children).
+  for (let i = 0; i < GROUP_COUNT; i++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mix-btn grp-btn";
+    btn.dataset.b3 = String(GROUP_B3_FIRST + i);
+    const numEl = document.createElement("span");
+    numEl.className = "mix-btn-num";
+    numEl.textContent = `Grp ${i + 1}`;
+    btn.appendChild(numEl);
+    const nameEl = document.createElement("span");
+    nameEl.className = "mix-btn-name";
+    nameEl.textContent = lastGroupNames[i] ?? "";
+    btn.appendChild(nameEl);
+    btn.addEventListener("click", () => toggleMixRoute(GROUP_B3_FIRST + i, btn));
     container.appendChild(btn);
   }
 
@@ -1223,6 +1269,7 @@ export function reset(): void {
   state.mixStereoPairs = [];
   stereoObservedMixes.clear();
   lastMixNames = []; // fresh session — no stale mix names
+  lastGroupNames = []; // fresh session — no stale group names
   buildMixButtons(); // rebuild without stereo bars
   lastMeters = null; // fresh session — don't re-apply stale readings
   buildChannelButtons();

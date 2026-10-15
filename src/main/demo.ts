@@ -69,6 +69,8 @@ const DEMO_VARIANTS: DemoVariant[] = [
       // Matrix slots 1-6 (b3 0x73-0x78; stereo matrices share the name)
       0x73: "Subs", 0x74: "Subs", 0x75: "Lobby", 0x76: "Lobby",
       0x77: "Feed L", 0x78: "Feed R", // Matrix 3 split to mono
+      // Group buses 1-4 (b3 0x48-0x4b)
+      0x48: "VoxG", 0x49: "DrumG", 0x4a: "KeyG",
     },
     stereoPairs: [
       [2, 3], [6, 7], [8, 9], [14, 15], [16, 17],
@@ -95,6 +97,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       { kind: "fx", fxIndex: 1, lr: "L", dest: Dest.USB, destChannel0: 2 },
       { kind: "fx", fxIndex: 1, lr: "R", dest: Dest.USB, destChannel0: 3 },
       { kind: "output", sourceB3: 0x73, dest: Dest.Local, destChannel0: 7 }, // Matrix 1 L
+      { kind: "output", sourceB3: 0x48, dest: Dest.Local, destChannel0: 9 }, // Group 1
       { kind: "monitor", source: 0, dest: Dest.Local, destChannel0: 6 },
     ],
   },
@@ -120,6 +123,8 @@ const DEMO_VARIANTS: DemoVariant[] = [
       // Matrix slots 1-6 (b3 0x73-0x78; stereo matrices share the name)
       0x73: "Mtx A", 0x74: "Mtx A", 0x75: "Mtx B", 0x76: "Mtx B",
       0x77: "Mtx C", 0x78: "Mtx C",
+      // Group buses 1-4 (b3 0x48-0x4b)
+      0x48: "Band", 0x49: "Vox",
     },
     stereoPairs: [
       [0, 1], [6, 7], [16, 17], [28, 29], [30, 31], [32, 33], [36, 37],
@@ -169,6 +174,8 @@ const DEMO_VARIANTS: DemoVariant[] = [
       // Matrix slots 1-6 (b3 0x73-0x78; stereo matrices share the name)
       0x73: "Delay", 0x74: "Delay", 0x75: "Subs", 0x76: "Subs",
       0x77: "Mtx C", 0x78: "Mtx C",
+      // Group buses 1-4 (b3 0x48-0x4b)
+      0x48: "Rhythm", 0x49: "Horns",
     },
     stereoPairs: [
       [2, 3], [16, 17], [28, 29], [30, 31], [32, 33],

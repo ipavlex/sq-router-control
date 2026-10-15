@@ -8,7 +8,9 @@ import {
   STEREO_ENTRY_STRIDE,
   STEREO_TABLE_INPUT_ENTRIES,
   STEREO_TABLE_OFFSET,
+  decodeLinkedBuses,
   decodeStereoPairs,
+  isBusAddress,
   pairEncoding,
   readStereoEntry,
 } from "../stereo-links";
@@ -104,5 +106,52 @@ describe("decodeStereoPairs", () => {
   it("stops cleanly when the table is truncated", () => {
     const buf = Buffer.alloc(STEREO_TABLE_OFFSET + 8);
     assert.deepEqual(decodeStereoPairs(buf), []);
+  });
+});
+
+describe("isBusAddress", () => {
+  it("covers groups, mixes, Main LR and matrix slots", () => {
+    assert.equal(isBusAddress(0x48), true); // Group 1
+    assert.equal(isBusAddress(0x4b), true); // Group 4
+    assert.equal(isBusAddress(0x58), true); // Mix 1
+    assert.equal(isBusAddress(0x68), true); // Main LR
+    assert.equal(isBusAddress(0x78), true); // Matrix slot 6
+    assert.equal(isBusAddress(0x2f), false); // input channel
+    assert.equal(isBusAddress(0x44), false); // gap between groups and mixes
+    assert.equal(isBusAddress(0x00), false);
+  });
+});
+
+describe("decodeLinkedBuses", () => {
+  /**
+   * Write an encoding-A bus pair (`[t][0f] [t][10]`) at an arbitrary offset,
+   * mimicking the separate bus-link regions (~81290-82960 on a real dump).
+   */
+  function putBusPair(buf: Buffer, off: number, master: number): void {
+    buf.writeUInt16LE(master, off);
+    buf[off + 2] = 0x0f;
+    buf.writeUInt16LE(master, off + 4);
+    buf[off + 4 + 2] = 0x10;
+  }
+
+  it("finds group, mix, Main LR and matrix masters in separate regions", () => {
+    const buf = Buffer.alloc(83000);
+    putBusPair(buf, 81332, 0x73); // Matrix slot 1
+    putBusPair(buf, 81420, 0x68); // Main LR
+    putBusPair(buf, 82484, 0x48); // Group 1
+    assert.deepEqual(decodeLinkedBuses(buf), [0x48, 0x68, 0x73]);
+  });
+
+  it("ignores non-bus targets and non-pair patterns", () => {
+    const buf = Buffer.alloc(83000);
+    putBusPair(buf, 81000, 0x2f); // input-like target — not a bus
+    // Single [t][0f] entry without the matching [t][10] follower.
+    buf.writeUInt16LE(0x58, 82000);
+    buf[82002] = 0x0f;
+    assert.deepEqual(decodeLinkedBuses(buf), []);
+  });
+
+  it("returns an empty list when nothing is linked", () => {
+    assert.deepEqual(decodeLinkedBuses(Buffer.alloc(1024)), []);
   });
 });

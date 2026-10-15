@@ -189,13 +189,20 @@ export function decodeMixStereoPairs(payload: Buffer): number[][] {
 //
 // The link region also carries encoding-A entries for non-input objects:
 // `[b3][0x0f][tail] [b3][0x10][tail]` marks b3 as the master of a stereo link.
-// On the reference console dump this yields Main LR (0x68) and matrix slots
-// 0x73/0x74 — NOT 0x75. Filtered to bus addresses only — input links are
-// decoded separately above.
+// These entries live in a SEPARATE region of the blob (~81290–82960 on the
+// reference SQ-5 dump), not in the input table at 81548. On that dump this
+// yields Main LR (0x68), matrix slots 0x73/0x74 (NOT 0x75) and Group 1
+// (0x48) — groups are stereo-linkable like the other buses. Filtered to bus
+// addresses only — input links are decoded separately above.
 
-/** Bus b3 addresses in the link table (mixes, Main LR, matrix slots). */
-function isBusB3(t: number): boolean {
-  return (t >= 0x58 && t <= 0x63) || t === 0x68 || (t >= 0x73 && t <= 0x78);
+/** Bus b3 addresses in the link table (groups, mixes, Main LR, matrix slots). */
+export function isBusAddress(t: number): boolean {
+  return (
+    (t >= 0x48 && t <= 0x4b) ||
+    (t >= 0x58 && t <= 0x63) ||
+    t === 0x68 ||
+    (t >= 0x73 && t <= 0x78)
+  );
 }
 
 /** Object addresses carrying an encoding-A stereo link, ascending. */
@@ -203,7 +210,7 @@ export function decodeLinkedBuses(payload: Buffer): number[] {
   const found = new Set<number>();
   for (let o = 0; o + 8 <= payload.length; o++) {
     const t = payload.readUInt16LE(o);
-    if (t === 0 || !isBusB3(t)) continue;
+    if (t === 0 || !isBusAddress(t)) continue;
     if (
       payload.readUInt16LE(o + 4) === t &&
       payload[o + 2] === 0x0f &&

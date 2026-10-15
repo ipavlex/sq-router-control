@@ -1407,6 +1407,12 @@ h2.stereo-diff:hover::after {
   transform: scale(0.96);
 }
 
+/* Group bus buttons — same look as mixes, extra left margin separates the
+   group block from the mixes (same visual break as .src-break in the FX row). */
+.grp-btn {
+  margin-left: 12px;
+}
+
 .mainlr-btn {
   font-size: 14px;
   padding: 12px 20px;

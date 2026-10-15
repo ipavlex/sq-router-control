@@ -72,6 +72,10 @@ export function b3ToLabel(b3: number): string {
   if (b3 >= 0x30 && b3 <= 0x32) return `St In ${b3 - 0x30 + 1}`;
   if (b3 >= 0x37 && b3 <= 0x3e) return `DCA ${b3 - 0x37 + 1}`;
   if (b3 >= 0x40 && b3 <= 0x43) return `FX ${b3 - 0x40 + 1}`;
+  // Group buses 1-4: separate mono audio buses (subgroups), confirmed on an
+  // SQ-5 ParamData dump (named channel blocks at 0x48-0x4b) and by
+  // allen-heath-sq-tools (talkback group targets Grp1-4 = 0x48-0x4b).
+  if (b3 >= 0x48 && b3 <= 0x4b) return `Group ${b3 - 0x48 + 1}`;
   if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x58 + 1}`;
   if (b3 === 0x68) return "Main LR";
   // Matrix buses: 6 slots (0x73–0x78); the 3 stereo matrices occupy slot
@@ -149,6 +153,8 @@ export interface RoutingSnapshot {
    * matrix normally carries the same name on both of its slots.
    */
   matrixNames: string[];
+  /** Group bus names 1-4 (index 0 = Group 1, b3 0x48–0x4b). */
+  groupNames: string[];
   /** number of routing update frames received. */
   updates: number;
   /** last routing/config block (sub=0x10) byte length, if any. */
@@ -311,6 +317,9 @@ export class RoutingModel {
     // Matrix slot names (b3 0x73-0x78 → Matrix1-L … Matrix3-R).
     const matrixNames: string[] = [];
     for (let i = 0; i < 6; i++) matrixNames.push(this.names.get(0x73 + i) ?? "");
+    // Group bus names (Group 1-4 → b3 0x48-0x4b).
+    const groupNames: string[] = [];
+    for (let i = 0; i < 4; i++) groupNames.push(this.names.get(0x48 + i) ?? "");
     return {
       inputs: Array.from(this.inputPatches.values()).sort(
         (a, b) => a.destB3 - b.destB3
@@ -321,6 +330,7 @@ export class RoutingModel {
       mixNames,
       fxNames,
       matrixNames,
+      groupNames,
       updates: this.updates,
       routingBlockBytes: this.routingBlockBytes,
     };
