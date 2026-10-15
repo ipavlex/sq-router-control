@@ -110,77 +110,135 @@ export function decodeStereoPairs(payload: Buffer): number[][] {
   return pairs;
 }
 
-// ── Mix bus mono/stereo mode ────────────────────────────────────────────────
+// ── Blob header: bus composition and stereo bitmaps ─────────────────────────
 //
-// The stereo-LINK table above covers input channels only. The mode of a MIX
-// bus (Mix 1-12, b3 0x58-0x63) is a separate per-bus flag stored inside the
-// 336-byte channel block, at byte +331 — the byte immediately before the
-// documented flags byte (+332 = polarity/mute). Observed values are 0 (mono)
-// and 1 (stereo).
+// Verified on a real SQ-5 (fw 1.6) across six controlled dumps on 2026-10-15
+// (pd-dumps/: connect-test, baseA, busB…busJ; see VERIFY-STEREO-MODES.md):
 //
-// Evidence (two independent ParamData-layout snapshots):
-//   * a real SQ-5 console dump  → +331 = 1 for Mix 1-10 (5 stereo pairs),
-//     0 for Mix 11-12;
-//   * a MixPad CurrentShow dump → +331 = 1 for Mix 1-8 (4 stereo pairs),
-//     0 for Mix 9-12.
-// In both cases +331 is the ONLY byte in the 336-byte block that consistently
-// separates the stereo set from the mono set, and the set is always an even
-// prefix of the mix list — exactly how stereo mixes allocate adjacent buses.
-// It is not used by inputs, FX returns, Main LR or matrix buses (always 0
-// there), so it is a mix-bus-only mode flag.
+//   @61      = number of GROUP buses of the 12 mix buses (0x02 → 0x07 on a
+//              Bus Config change 10 aux + 2 grp → 5 aux + 7 grp);
+//   @62      = 0x04, constant, meaning unknown;
+//   @65      = number of AUX buses (0x0a → 0x05 in the same change);
+//   @90..91  = u16LE stereo bitmap of the 12 mix buses:
+//              bit i = bus i+1 stereo. Bus order = aux 1..N then group 1..M,
+//              which is exactly the mix-pool slot order (b3 0x58+i = Mix i+1).
+//              Bits 12–15 are always 1 (padding).
+//              Confirmed by three clean toggles: 0xFC00 (grp 1-2 stereo) →
+//              0xFFE0 (grp 1-7 stereo, aux mono) → 0xFFE1 (Mix 1 stereo) →
+//              0xFFE0 (back to mono).
+//   @92      = 0x05, constant, meaning unknown;
+//   @93      = matrix pair bitmap: bit (3 + p) = matrix pair p ganged
+//              (pair 1 = 0x73+0x76, pair 2 = 0x74+0x77, pair 3 = 0x75+0x78).
+//              SQ-5 has 6 matrix buses; a STEREO matrix consumes two of them
+//              (L = 0x73–0x75, R = 0x76–0x78, name stored in the L slot).
+//              Breaking a stereo matrix to mono frees the R bus, which shows
+//              up as an additional mono matrix in the Mix Stereo menu
+//              (3 stereo → 6 mono). Confirmed by clean toggles on all three
+//              pairs: 0x38 → 0x30 → 0x20 → 0x00 → 0x08.
 //
-// TODO(verify): confirm polarity (1 = stereo) with a controlled dump — toggle
-// one mix on the console and re-dump; expect a single-byte 0↔1 change at
-// `884 + (0x57 + mix)·336 + 331`.
+// CAUTION — the per-block byte +331 is NOT the stereo mode. It is a sticky
+// per-slot flag that survives Bus Config changes without being updated: in a
+// dump with 10 active aux only the 5 slots that had been aux in a previous
+// config carry 1. It also did not change when Mix 1 was toggled stereo.
+// Kept as readSlotFlag()/decodeSlotFlags() for diagnostics only.
 
 /** Channel parameter block base/stride in the ParamData blob. */
 export const CHANNEL_BLOCK_BASE = 884;
 export const CHANNEL_BLOCK_STRIDE = 336;
-/** Byte inside a channel block holding the mix bus mono/stereo mode. */
-export const BUS_MODE_OFFSET = 331;
+/** Sticky per-slot flag inside a channel block (NOT the stereo mode). */
+export const SLOT_FLAG_OFFSET = 331;
 /** Mix buses occupy b3 0x58–0x63. */
 export const MIX_B3_FIRST = 0x58;
 export const MIX_BUS_COUNT = 12;
 
+/** Header offsets of the bus composition fields. */
+export const HEADER_GROUP_COUNT_OFFSET = 61;
+export const HEADER_AUX_COUNT_OFFSET = 65;
+/** u16LE stereo bitmap of the 12 mix buses (bit i = Mix i+1). */
+export const HEADER_BUS_STEREO_MASK_OFFSET = 90;
+/** Matrix pair bitmap (bit 3/4/5 = pair 1/2/3 ganged). */
+export const HEADER_MATRIX_MASK_OFFSET = 93;
+/** Matrix buses occupy b3 0x73–0x78 (6 mono buses, stereo = L+R pair). */
+export const MATRIX_B3_FIRST = 0x73;
+export const MATRIX_BUS_COUNT = 6;
+
 /**
- * Read a channel block's bus-mode byte (0 = mono, 1 = stereo) or null when
- * the block is beyond the payload. Intended for mix buses (b3 0x58–0x63).
+ * Read the sticky per-slot flag (+331) of a channel block, or null when the
+ * block is beyond the payload. Diagnostics only — NOT the stereo mode.
  */
-export function readBusMode(payload: Buffer, b3: number): number | null {
-  const off = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE + BUS_MODE_OFFSET;
+export function readSlotFlag(payload: Buffer, b3: number): number | null {
+  const off = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE + SLOT_FLAG_OFFSET;
   if (off >= payload.length) return null;
   return payload[off] === 0 ? 0 : 1;
 }
 
-/** Per-mix stereo mode, index 0 = Mix 1. 1 = stereo, 0 = mono/unknown. */
-export function decodeMixModes(payload: Buffer): number[] {
-  const modes: number[] = [];
+/** Sticky +331 flag per mix slot, index 0 = Mix 1. Diagnostics only. */
+export function decodeSlotFlags(payload: Buffer): number[] {
+  const flags: number[] = [];
   for (let i = 0; i < MIX_BUS_COUNT; i++) {
-    modes.push(readBusMode(payload, MIX_B3_FIRST + i) ?? 0);
+    flags.push(readSlotFlag(payload, MIX_B3_FIRST + i) ?? 0);
   }
-  return modes;
+  return flags;
+}
+
+/** Bus composition from the blob header. */
+export interface BusComposition {
+  /** Number of group buses (of the 12 mix buses). */
+  groups: number;
+  /** Number of aux buses. */
+  aux: number;
+}
+
+/** Decode @61 (groups) / @65 (aux), or null when the payload is too short. */
+export function decodeBusComposition(payload: Buffer): BusComposition | null {
+  if (payload.length < HEADER_AUX_COUNT_OFFSET + 1) return null;
+  return {
+    groups: payload[HEADER_GROUP_COUNT_OFFSET],
+    aux: payload[HEADER_AUX_COUNT_OFFSET],
+  };
 }
 
 /**
- * Stereo mix pairs from the ParamData channel blocks, as 0-based mix indexes:
- * [[0, 1]] = Mix 1-2. Adjacent stereo mixes are reported as a pair; a stereo
- * mix without a stereo neighbour is reported as a single-element-style
- * [i, i] pair so the monitor still shows its L/R meter.
+ * Stereo bitmap of the 12 mix buses from the header (@90..91, u16LE):
+ * index 0 = Mix 1. Bits 12–15 are padding and ignored. Returns null when
+ * the payload is too short.
+ */
+export function decodeBusStereoMask(payload: Buffer): boolean[] | null {
+  if (payload.length < HEADER_BUS_STEREO_MASK_OFFSET + 2) return null;
+  const word = payload.readUInt16LE(HEADER_BUS_STEREO_MASK_OFFSET);
+  const mask: boolean[] = [];
+  for (let i = 0; i < MIX_BUS_COUNT; i++) mask.push((word & (1 << i)) !== 0);
+  return mask;
+}
+
+/**
+ * Ganged matrix pairs from the header (@93): b3 pairs like [0x73, 0x76]
+ * (L bus, R bus). A stereo matrix occupies both; mono matrices appear as
+ * single buses. Returns [] when the payload is too short.
+ */
+export function decodeMatrixStereoPairs(payload: Buffer): number[][] {
+  if (payload.length < HEADER_MATRIX_MASK_OFFSET + 1) return [];
+  const byte = payload[HEADER_MATRIX_MASK_OFFSET];
+  const pairs: number[][] = [];
+  for (let p = 0; p < 3; p++) {
+    if ((byte & (1 << (3 + p))) !== 0) {
+      pairs.push([MATRIX_B3_FIRST + p, MATRIX_B3_FIRST + 3 + p]);
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Stereo mix buses from the header bitmap, as 0-based mix indexes:
+ * [[i, i]] = Mix i+1 is a single stereo bus (its own L/R metering pair).
+ * A stereo mix bus is independent — adjacent stereo mixes are NOT merged.
  */
 export function decodeMixStereoPairs(payload: Buffer): number[][] {
-  const stereo = decodeMixModes(payload).map((m) => m === 1);
+  const mask = decodeBusStereoMask(payload);
+  if (!mask) return [];
   const pairs: number[][] = [];
-  const used = new Array<boolean>(MIX_BUS_COUNT).fill(false);
   for (let i = 0; i < MIX_BUS_COUNT; i++) {
-    if (!stereo[i] || used[i]) continue;
-    if (i + 1 < MIX_BUS_COUNT && stereo[i + 1]) {
-      pairs.push([i, i + 1]);
-      used[i] = true;
-      used[i + 1] = true;
-    } else {
-      pairs.push([i, i]);
-      used[i] = true;
-    }
+    if (mask[i]) pairs.push([i, i]);
   }
   return pairs;
 }
@@ -190,10 +248,15 @@ export function decodeMixStereoPairs(payload: Buffer): number[][] {
 // The link region also carries encoding-A entries for non-input objects:
 // `[b3][0x0f][tail] [b3][0x10][tail]` marks b3 as the master of a stereo link.
 // These entries live in a SEPARATE region of the blob (~81290–82960 on the
-// reference SQ-5 dump), not in the input table at 81548. On that dump this
-// yields Main LR (0x68), matrix slots 0x73/0x74 (NOT 0x75) and Group 1
-// (0x48) — groups are stereo-linkable like the other buses. Filtered to bus
-// addresses only — input links are decoded separately above.
+// reference SQ-5 dump), not in the input table at 81548.
+//
+// CAUTION — these bus pairs are STICKY gang marks, not a reliable stereo
+// indicator: the `0x10` entries vanish when a matrix is broken to mono, but
+// they do NOT come back when it is re-ganged, and they can be lost as a side
+// effect of Bus Config changes while the bus stays stereo. The authoritative
+// stereo state lives in the header bitmaps (@90..91 for mix buses, @93 for
+// matrix pairs). Filtered to bus addresses only — input links are decoded
+// separately above.
 
 /** Bus b3 addresses in the link table (groups, mixes, Main LR, matrix slots). */
 export function isBusAddress(t: number): boolean {

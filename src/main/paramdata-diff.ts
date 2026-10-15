@@ -38,8 +38,8 @@ const LINK_ENTRIES = 48;
 /** Region where bus stereo links live (observed on the reference SQ-5 dump). */
 export const BUS_LINK_REGION: readonly [number, number] = [81290, 82960];
 
-/** Mix mode byte inside a channel block (mono/stereo of Mix 1-12). */
-const BUS_MODE_OFFSET = 331;
+/** Sticky per-slot flag inside a channel block (NOT the stereo mode). */
+const SLOT_FLAG_OFFSET = 331;
 
 /** Field names inside the 336-byte channel block, by relative offset. */
 const BLOCK_FIELDS: Record<number, string> = {
@@ -55,7 +55,7 @@ const BLOCK_FIELDS: Record<number, string> = {
   306: "delay on/off",
   324: "trim (LE16 lo)",
   325: "trim (LE16 hi)",
-  331: "bus mono/stereo mode byte (+331)",
+  331: "sticky slot flag (+331; NOT the stereo mode — see SQ-PROTOCOL.md §8.5)",
   332: "flags (bit0 polarity, bit1 mute)",
 };
 
@@ -83,6 +83,19 @@ function linkPart(part: number): string {
  * "Mix 5 (b3 0x5c) — channel block +331 (bus mono/stereo mode byte)".
  */
 export function describeOffset(offset: number): string {
+  // 0. Blob header: bus composition and stereo bitmaps (verified on SQ-5
+  //    fw 1.6, see SQ-PROTOCOL.md §8.5).
+  if (offset === 61) return "header @61: group bus count";
+  if (offset === 62) return "header @62: unknown (0x04 constant)";
+  if (offset === 65) return "header @65: aux bus count";
+  if (offset === 90 || offset === 91) {
+    return `header @90..91: mix bus stereo bitmap u16LE (bit ${offset - 90}… = Mix ${offset - 89}… stereo)`;
+  }
+  if (offset === 92) return "header @92: unknown (0x05 constant)";
+  if (offset === 93) {
+    return "header @93: matrix pair bitmap (bit3=pair1 0x73+0x76, bit4=pair2 0x74+0x77, bit5=pair3 0x75+0x78)";
+  }
+
   // 1. Input stereo-link table (fixed offset, 48 entries).
   const linkEnd = LINK_TABLE_OFFSET + LINK_ENTRIES * LINK_ENTRY_STRIDE;
   if (offset >= LINK_TABLE_OFFSET && offset < linkEnd) {
@@ -200,26 +213,25 @@ export function diffParamData(a: Buffer, b: Buffer): string {
   // Verdict hints for the classic controlled-dump experiments.
   lines.push("");
   lines.push("Hints:");
+  const headerMaskChanges = changes.filter((c) => c.offset >= 90 && c.offset <= 93);
+  if (headerMaskChanges.length > 0) {
+    lines.push(
+      `- Header stereo bitmap changed (@90..93) — mix bus stereo toggle is @90..91 ` +
+        "(u16LE, bit i = Mix i+1), matrix pair gang is @93 (bit3/4/5 = pair 1/2/3)."
+    );
+  }
   const mixModeRuns = runs(changes).filter((run) => {
     const rel = run[0].offset - BLOCK_BASE;
     if (rel < 0) return false;
     const b3 = Math.floor(rel / BLOCK_STRIDE);
     const rem = rel % BLOCK_STRIDE;
-    return run.length === 1 && rem === BUS_MODE_OFFSET && b3 >= 0x58 && b3 <= 0x63;
+    return run.length === 1 && rem === SLOT_FLAG_OFFSET && b3 >= 0x58 && b3 <= 0x63;
   });
-  if (changes.length === 1 && mixModeRuns.length === 1) {
-    const c = changes[0];
-    const rel = c.offset - BLOCK_BASE;
-    const b3 = Math.floor(rel / BLOCK_STRIDE);
+  if (mixModeRuns.length > 0) {
     lines.push(
-      `- Single byte changed at ${b3ToLabel(b3)} block +331: 0x${c.from
-        .toString(16)} → 0x${c.to.toString(16)}. ` +
-        `This CONFIRMS the mix mono/stereo mode byte${c.to === 1 ? " (polarity 1 = stereo)" : ""}.`
-    );
-  } else if (mixModeRuns.length > 0) {
-    lines.push(
-      `- Mix mode byte (+331) changed in ${mixModeRuns.length} place(s) — see above; ` +
-        "other changes are noise (live faders/mutes)."
+      `- Sticky slot flag (+331) changed in ${mixModeRuns.length} place(s) — ` +
+        "this flag is NOT the stereo mode (it survives Bus Config changes " +
+        "without being updated); the stereo state lives in header @90..91."
     );
   }
   const busLinkChanges = changes.filter(
@@ -228,16 +240,16 @@ export function diffParamData(a: Buffer, b: Buffer): string {
   if (busLinkChanges.length > 0) {
     lines.push(
       `- ${busLinkChanges.length} changed byte(s) inside the bus link region ` +
-        `(${BUS_LINK_REGION[0]}–${BUS_LINK_REGION[1]}) — matrix/group stereo config. ` +
-        "Compare the \"Bus link regions\" sections of both .txt reports."
+        `(${BUS_LINK_REGION[0]}–${BUS_LINK_REGION[1]}) — sticky gang marks ` +
+        "(0x10 entries vanish when a matrix is broken to mono, but do not " +
+        "come back on re-gang). Authoritative state: header @90..93."
     );
   }
-  if (changes.length === busLinkChanges.length && busLinkChanges.length > 0) {
-    lines.push(
-      "- ALL changes are in the bus link region — clean matrix/group experiment."
-    );
-  }
-  if (mixModeRuns.length === 0 && busLinkChanges.length === 0) {
+  if (
+    mixModeRuns.length === 0 &&
+    busLinkChanges.length === 0 &&
+    headerMaskChanges.length === 0
+  ) {
     lines.push("- No link/mode changes — the diffs above are channel state (names, levels).");
   }
   return lines.join("\n");

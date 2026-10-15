@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { Connection } from "../src/main/transport/connection";
 import { analyzeStereoTable } from "../src/main/paramdata-diagnostics";
 import { diffParamData } from "../src/main/paramdata-diff";
-import { decodeLinkedBuses, decodeMixModes } from "../src/main/stereo-links";
+import { decodeBusComposition, decodeBusStereoMask, decodeMatrixStereoPairs, decodeLinkedBuses } from "../src/main/stereo-links";
 
 function usage(): never {
   console.log(`sq-dump — SQ console ParamData capture/diff CLI
@@ -85,16 +85,27 @@ async function capture(
   writeFileSync(txtPath, analyzeStereoTable(blob).report, "utf8");
 
   // Short digest right in the terminal.
-  const modes = decodeMixModes(blob);
-  const stereo = modes.filter((m) => m === 1).length;
+  const comp = decodeBusComposition(blob);
+  const mask = decodeBusStereoMask(blob);
+  const mtx = decodeMatrixStereoPairs(blob);
   const linked = decodeLinkedBuses(blob)
     .map((b) => `0x${b.toString(16)}`)
     .join(", ");
   console.log(`saved: ${binPath}`);
   console.log(`report: ${txtPath}`);
   console.log(`blob: ${blob.length} bytes`);
-  console.log(`mix modes: ${stereo}/12 stereo slots (${modes.join("")})`);
-  console.log(`encoding-A linked buses: ${linked || "none"}`);
+  if (comp) {
+    console.log(`buses: ${comp.aux} aux + ${comp.groups} groups (header @61/@65)`);
+  }
+  if (mask) {
+    console.log(`mix stereo mask (@90..91): ${mask.map((b) => (b ? 1 : 0)).join("")}`);
+  }
+  console.log(
+    `matrix pairs ganged (@93): ${
+      mtx.map(([l, r]) => `0x${l.toString(16)}+0x${r.toString(16)}`).join(", ") || "none"
+    }`
+  );
+  console.log(`encoding-A gang marks: ${linked || "none"} (sticky, secondary)`);
 }
 
 function main(): void {

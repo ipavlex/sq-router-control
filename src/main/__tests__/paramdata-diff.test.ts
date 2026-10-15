@@ -15,8 +15,8 @@ import {
 /** Reference blob size (SQ-5 dump). */
 const SIZE = 97376;
 
-/** Mix 1 bus-mode byte: 884 + 0x58*336 + 331. */
-const MIX1_MODE = 884 + 0x58 * 336 + 331;
+/** Mix 1 sticky slot flag: 884 + 0x58*336 + 331. */
+const MIX1_FLAG = 884 + 0x58 * 336 + 331;
 
 describe("diffBuffers", () => {
   it("reports every changed byte with from/to values", () => {
@@ -35,11 +35,19 @@ describe("diffBuffers", () => {
 });
 
 describe("describeOffset", () => {
-  it("decodes a mix channel-block bus-mode byte", () => {
-    const desc = describeOffset(MIX1_MODE);
+  it("decodes a mix channel-block sticky flag byte", () => {
+    const desc = describeOffset(MIX1_FLAG);
     assert.match(desc, /Mix 1 \(b3 0x58\)/);
     assert.match(desc, /\+331/);
-    assert.match(desc, /mono\/stereo/);
+    assert.match(desc, /sticky slot flag/);
+    assert.match(desc, /NOT the stereo mode/);
+  });
+
+  it("decodes the header composition and stereo bitmap offsets", () => {
+    assert.match(describeOffset(61), /header @61: group bus count/);
+    assert.match(describeOffset(65), /header @65: aux bus count/);
+    assert.match(describeOffset(90), /mix bus stereo bitmap/);
+    assert.match(describeOffset(93), /matrix pair bitmap/);
   });
 
   it("decodes a group name byte and flags byte", () => {
@@ -79,24 +87,34 @@ describe("describeOffset", () => {
 });
 
 describe("diffParamData", () => {
-  it("flags a clean single mix-mode experiment with a verdict", () => {
+  it("flags a sticky +331 change as NOT the stereo mode", () => {
     const a = Buffer.alloc(SIZE);
     const b = Buffer.from(a);
-    b[MIX1_MODE] = 1;
+    b[MIX1_FLAG] = 1;
     const report = diffParamData(a, b);
     assert.match(report, /Changed bytes: 1/);
     assert.match(report, /Mix 1 \(b3 0x58\).*\+331/);
-    assert.match(report, /CONFIRMS the mix mono\/stereo mode byte \(polarity 1 = stereo\)/);
+    assert.match(report, /NOT the stereo mode/);
+    assert.match(report, /header @90\.\.91/);
   });
 
-  it("flags a bus-link-only experiment as clean", () => {
+  it("flags a header stereo-mask change", () => {
+    const a = Buffer.alloc(SIZE);
+    const b = Buffer.from(a);
+    b[90] = 0xe1; // bit0 = Mix 1 stereo
+    const report = diffParamData(a, b);
+    assert.match(report, /Header stereo bitmap changed/);
+    assert.match(report, /matrix pair gang is @93/);
+  });
+
+  it("flags a bus-link-only experiment", () => {
     const a = Buffer.alloc(SIZE);
     const b = Buffer.from(a);
     b[82485] = 0x10; // inside the bus link region
     b[82489] = 0x0f;
     const report = diffParamData(a, b);
     assert.match(report, /bus link region/);
-    assert.match(report, /ALL changes are in the bus link region/);
+    assert.match(report, /sticky gang marks/);
   });
 
   it("identical dumps produce an empty diff", () => {

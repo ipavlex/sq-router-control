@@ -8,7 +8,11 @@ import {
   STEREO_ENTRY_STRIDE,
   STEREO_TABLE_INPUT_ENTRIES,
   STEREO_TABLE_OFFSET,
+  decodeBusComposition,
+  decodeBusStereoMask,
   decodeLinkedBuses,
+  decodeMatrixStereoPairs,
+  decodeMixStereoPairs,
   decodeStereoPairs,
   isBusAddress,
   pairEncoding,
@@ -119,6 +123,82 @@ describe("isBusAddress", () => {
     assert.equal(isBusAddress(0x2f), false); // input channel
     assert.equal(isBusAddress(0x44), false); // gap between groups and mixes
     assert.equal(isBusAddress(0x00), false);
+  });
+});
+
+describe("decodeBusComposition", () => {
+  it("reads group/aux counts from header @61/@65", () => {
+    const buf = blob();
+    buf[61] = 0x07;
+    buf[65] = 0x05;
+    assert.deepEqual(decodeBusComposition(buf), { groups: 7, aux: 5 });
+  });
+
+  it("returns null when the payload is too short", () => {
+    assert.equal(decodeBusComposition(Buffer.alloc(60)), null);
+  });
+});
+
+describe("decodeBusStereoMask", () => {
+  it("decodes the u16LE bitmap at @90..91, bit i = Mix i+1", () => {
+    const buf = blob();
+    // 0xFFE1: bit0 (Mix 1) + bits 5-11 (Mix 6-12) stereo, bits 12-15 padding.
+    buf.writeUInt16LE(0xffe1, 90);
+    const mask = decodeBusStereoMask(buf);
+    assert.equal(mask?.length, 12);
+    assert.equal(mask?.[0], true);
+    assert.equal(mask?.[1], false);
+    assert.equal(mask?.[5], true);
+    assert.equal(mask?.[11], true);
+  });
+
+  it("ignores the padding bits 12-15", () => {
+    const buf = blob();
+    buf.writeUInt16LE(0xffff, 90);
+    const mask = decodeBusStereoMask(buf);
+    assert.equal(mask?.filter(Boolean).length, 12);
+  });
+
+  it("returns null when the payload is too short", () => {
+    assert.equal(decodeBusStereoMask(Buffer.alloc(90)), null);
+  });
+});
+
+describe("decodeMixStereoPairs", () => {
+  it("reports each stereo mix as its own [i, i] pair from the bitmap", () => {
+    const buf = blob();
+    // Mix 1 and Mix 3 stereo — adjacent stereo mixes are NOT merged.
+    buf.writeUInt16LE(0x0005, 90);
+    assert.deepEqual(decodeMixStereoPairs(buf), [
+      [0, 0],
+      [2, 2],
+    ]);
+  });
+
+  it("returns [] when the bitmap is unavailable", () => {
+    assert.deepEqual(decodeMixStereoPairs(Buffer.alloc(90)), []);
+  });
+});
+
+describe("decodeMatrixStereoPairs", () => {
+  it("decodes ganged pairs from @93 (bit3/4/5 = pair 1/2/3)", () => {
+    const buf = blob();
+    buf[93] = 0x38; // all three pairs ganged
+    assert.deepEqual(decodeMatrixStereoPairs(buf), [
+      [0x73, 0x76],
+      [0x74, 0x77],
+      [0x75, 0x78],
+    ]);
+  });
+
+  it("returns [] when no pair is ganged", () => {
+    const buf = blob();
+    buf[93] = 0x00;
+    assert.deepEqual(decodeMatrixStereoPairs(buf), []);
+  });
+
+  it("returns [] when the payload is too short", () => {
+    assert.deepEqual(decodeMatrixStereoPairs(Buffer.alloc(90)), []);
   });
 });
 

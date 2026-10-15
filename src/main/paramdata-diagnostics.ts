@@ -16,12 +16,15 @@ import {
   readStereoEntry,
   decodeStereoPairs,
   pairEncoding,
-  decodeMixModes,
+  decodeSlotFlags,
   decodeLinkedBuses,
-  readBusMode,
+  readSlotFlag,
+  decodeBusComposition,
+  decodeBusStereoMask,
+  decodeMatrixStereoPairs,
   CHANNEL_BLOCK_BASE,
   CHANNEL_BLOCK_STRIDE,
-  BUS_MODE_OFFSET,
+  SLOT_FLAG_OFFSET,
   MIX_B3_FIRST,
   MIX_BUS_COUNT,
   isBusAddress,
@@ -36,36 +39,54 @@ function busLabel(b3: number): string {
   return `0x${b3.toString(16)}`;
 }
 
-/** Per-bus mono/stereo mode report (mix byte +331 + linked buses). */
+/** Bus composition, stereo bitmaps and sticky flags report. */
 function busModeBlock(payload: Buffer): string {
   const lines: string[] = [];
-  lines.push("--- Bus mono/stereo mode ---");
+  lines.push("--- Bus composition and stereo modes ---");
+  const comp = decodeBusComposition(payload);
+  if (comp) {
+    lines.push(
+      `  Composition (header @61/@65): ${comp.aux} aux + ${comp.groups} groups`
+    );
+  }
+  const mask = decodeBusStereoMask(payload);
+  if (mask) {
+    lines.push(
+      `  Mix stereo bitmap (header @90..91, bit i = Mix i+1): ${mask
+        .map((b) => (b ? 1 : 0))
+        .join("")}`
+    );
+  }
+  const mtx = decodeMatrixStereoPairs(payload);
   lines.push(
-    `Mix mode byte: block(${CHANNEL_BLOCK_BASE}) + b3·${CHANNEL_BLOCK_STRIDE} + ${BUS_MODE_OFFSET}`
+    `  Matrix pairs ganged (header @93): ${
+      mtx.map(([l, r]) => `0x${l.toString(16)}+0x${r.toString(16)}`).join(", ") ||
+      "none"
+    }`
   );
-  const modes = decodeMixModes(payload);
+  lines.push(
+    `  Sticky slot flag: block(${CHANNEL_BLOCK_BASE}) + b3·${CHANNEL_BLOCK_STRIDE} + ${SLOT_FLAG_OFFSET} ` +
+      "(NOT the stereo mode — survives Bus Config changes)"
+  );
+  const flags = decodeSlotFlags(payload);
   for (let i = 0; i < MIX_BUS_COUNT; i++) {
     const b3 = MIX_B3_FIRST + i;
-    const abs = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE + BUS_MODE_OFFSET;
+    const abs = CHANNEL_BLOCK_BASE + b3 * CHANNEL_BLOCK_STRIDE + SLOT_FLAG_OFFSET;
     lines.push(
       `  Mix ${(i + 1).toString().padStart(2)} (b3 0x${b3.toString(16)} @ ${abs}): ` +
-        `${modes[i] === 1 ? "stereo" : "mono"} (0x${(
-          readBusMode(payload, b3) ?? 0
-        )
-          .toString(16)
-          .padStart(2, "0")})`
+        `sticky flag ${readSlotFlag(payload, b3) ?? "?"}`
     );
   }
   const linked = decodeLinkedBuses(payload);
   lines.push(
-    `  Encoding-A linked buses in blob: ${
+    `  Encoding-A gang marks in blob (sticky, secondary): ${
       linked.map((b) => `${busLabel(b)} (0x${b.toString(16)})`).join(", ") || "none"
     }`
   );
   return lines.join("\n");
 }
 
-/** Group bus blocks (b3 0x48-0x4b): name, mode byte +331, flags +332. */
+/** Group bus blocks (b3 0x48-0x4b): name, sticky flag +331, flags +332. */
 function groupBlockSection(payload: Buffer): string {
   const lines: string[] = [];
   lines.push("--- Group buses (b3 0x48-0x4b) ---");
@@ -83,7 +104,7 @@ function groupBlockSection(payload: Buffer): string {
       .trimEnd();
     lines.push(
       `  Group ${i + 1} (b3 0x${b3.toString(16)} @ ${blk}): name="${name}" ` +
-        `+331=${readBusMode(payload, b3) ?? "?"} +332=0x${payload[blk + 332]
+        `sticky +331=${readSlotFlag(payload, b3) ?? "?"} +332=0x${payload[blk + 332]
           .toString(16)
           .padStart(2, "0")}`
     );
