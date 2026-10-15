@@ -40,7 +40,11 @@ describe("b3ToLabel", () => {
     assert.equal(b3ToLabel(0x58), "Mix 1");
     assert.equal(b3ToLabel(0x68), "Main LR");
     assert.equal(b3ToLabel(0x73), "Matrix 1 L");
-    assert.equal(b3ToLabel(0x74), "Matrix 1 R");
+    assert.equal(b3ToLabel(0x74), "Matrix 2 L");
+    assert.equal(b3ToLabel(0x75), "Matrix 3 L");
+    assert.equal(b3ToLabel(0x76), "Matrix 1 R");
+    assert.equal(b3ToLabel(0x77), "Matrix 2 R");
+    assert.equal(b3ToLabel(0x78), "Matrix 3 R");
   });
 
   it("falls back to a hex label for unknown addresses", () => {
@@ -203,6 +207,14 @@ describe("RoutingModel — names, stereo pairs and reset", () => {
     assert.equal(snap.groupNames.length, 4);
     // Unnamed buses come through as empty strings, not undefined.
     assert.equal(snap.groupNames[3], "");
+  });
+
+  it("carries ganged matrix pairs into the snapshot and resets them", () => {
+    const m = new RoutingModel();
+    m.matrixStereoPairs = [[0x73, 0x76], [0x77, 0x78]];
+    assert.deepEqual(m.snapshot().matrixStereoPairs, [[0x73, 0x76], [0x77, 0x78]]);
+    m.reset();
+    assert.deepEqual(m.snapshot().matrixStereoPairs, []);
   });
 
   it("filters stereo pairs to contiguous even/odd addresses", () => {

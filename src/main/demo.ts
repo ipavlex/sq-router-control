@@ -35,6 +35,8 @@ interface DemoVariant {
   stereoPairs: number[][];
   /** Stereo-linked mix pairs as 0-based mix indexes (Mix 1 = 0). */
   mixStereoPairs: number[][];
+  /** Ganged matrix pairs as b3 addresses (ParamData header @93 layout). */
+  matrixStereoPairs: number[][];
   inputs: { destB3: number; source: number; sourceChannel: number }[];
   outputs: (
     | { kind: "output"; sourceB3: number; dest: number; destChannel0: number }
@@ -66,9 +68,12 @@ const DEMO_VARIANTS: DemoVariant[] = [
       0x5e: "Wedge", 0x5f: "Foldb",
       0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
       0x62: "Spill", 0x63: "Spare",
-      // Matrix slots 1-6 (b3 0x73-0x78; stereo matrices share the name)
-      0x73: "Subs", 0x74: "Subs", 0x75: "Lobby", 0x76: "Lobby",
-      0x77: "Feed L", 0x78: "Feed R", // Matrix 3 split to mono
+      // Matrix slots 1-6 (b3 0x73-0x78; cross-paired: L = 0x73-0x75,
+      // R = 0x76-0x78). Pair 1 and pair 3 ganged, slots 0x74/0x75 split
+      // to mono — exercises the mixed button layout (MON-B5).
+      0x73: "Subs", 0x76: "Subs", // Matrix pair 1 stereo
+      0x74: "Lobby", 0x75: "Fill", // split to mono
+      0x77: "Feed", 0x78: "Feed", // Matrix pair 3 stereo
       // Group buses 1-4 (b3 0x48-0x4b)
       0x48: "VoxG", 0x49: "DrumG", 0x4a: "KeyG",
     },
@@ -77,6 +82,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       [28, 29], [30, 31], [32, 33], [36, 37],
     ],
     mixStereoPairs: [[0, 1], [8, 9]],
+    matrixStereoPairs: [[0x73, 0x76], [0x77, 0x78]],
     inputs: [
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: i, source: Src.Local, sourceChannel: i })),
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: 16 + i, source: Src.SLink, sourceChannel: i })),
@@ -120,9 +126,11 @@ const DEMO_VARIANTS: DemoVariant[] = [
       0x5c: "Wedge", 0x5d: "Drums",
       0x5e: "IEM2 L", 0x5f: "IEM2 R", // Mix 7-8 stereo
       0x60: "IEM 3", 0x61: "IEM 4", 0x62: "Spare", 0x63: "Foldb",
-      // Matrix slots 1-6 (b3 0x73-0x78; stereo matrices share the name)
-      0x73: "Mtx A", 0x74: "Mtx A", 0x75: "Mtx B", 0x76: "Mtx B",
-      0x77: "Mtx C", 0x78: "Mtx C",
+      // Matrix slots 1-6 (b3 0x73-0x78; cross-paired: L = 0x73-0x75,
+      // R = 0x76-0x78) — all three pairs ganged (3 stereo buttons).
+      0x73: "Mtx A", 0x76: "Mtx A",
+      0x74: "Mtx B", 0x77: "Mtx B",
+      0x75: "Mtx C", 0x78: "Mtx C",
       // Group buses 1-4 (b3 0x48-0x4b)
       0x48: "Band", 0x49: "Vox",
     },
@@ -130,6 +138,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       [0, 1], [6, 7], [16, 17], [28, 29], [30, 31], [32, 33], [36, 37],
     ],
     mixStereoPairs: [[2, 3], [6, 7]],
+    matrixStereoPairs: [[0x73, 0x76], [0x74, 0x77], [0x75, 0x78]],
     inputs: [
       ...Array.from({ length: 8 }, (_, i) => ({ destB3: i, source: Src.Local, sourceChannel: i })),
       ...Array.from({ length: 8 }, (_, i) => ({ destB3: 8 + i, source: Src.SLink, sourceChannel: i })),
@@ -171,9 +180,9 @@ const DEMO_VARIANTS: DemoVariant[] = [
       0x5c: "Bass", 0x5d: "Keys", 0x5e: "Horns", 0x5f: "IEM 1",
       0x60: "IEM 2", 0x61: "Wedge",
       0x62: "Rec L", 0x63: "Rec R", // Mix 11-12 stereo
-      // Matrix slots 1-6 (b3 0x73-0x78; stereo matrices share the name)
-      0x73: "Delay", 0x74: "Delay", 0x75: "Subs", 0x76: "Subs",
-      0x77: "Mtx C", 0x78: "Mtx C",
+      // Matrix slots 1-6 (b3 0x73-0x78) — no pair ganged: six mono matrices,
+      // three of them named like the reference SQ-5 dump (MON-B5).
+      0x73: "MainPA", 0x74: "FrntFl", 0x75: "YouTMx",
       // Group buses 1-4 (b3 0x48-0x4b)
       0x48: "Rhythm", 0x49: "Horns",
     },
@@ -181,6 +190,7 @@ const DEMO_VARIANTS: DemoVariant[] = [
       [2, 3], [16, 17], [28, 29], [30, 31], [32, 33],
     ],
     mixStereoPairs: [[10, 11]],
+    matrixStereoPairs: [],
     inputs: [
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: i, source: Src.SLink, sourceChannel: i })),
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: 16 + i, source: Src.Local, sourceChannel: i })),
@@ -449,6 +459,7 @@ export class DemoSession {
           [28, 29], [30, 31], [32, 33], [36, 37],
         ];
         this.host.model.mixStereoPairs = [[0, 1], [8, 9]];
+        this.host.model.matrixStereoPairs = []; // six mono matrices (MON-B5)
       },
       // Phase 4 — output patches.
       () => {
@@ -626,6 +637,7 @@ export class DemoSession {
     // Stereo pairs.
     this.host.model.stereoPairs = config.stereoPairs;
     this.host.model.mixStereoPairs = config.mixStereoPairs;
+    this.host.model.matrixStereoPairs = config.matrixStereoPairs;
 
     // Input patches.
     for (const p of config.inputs) {

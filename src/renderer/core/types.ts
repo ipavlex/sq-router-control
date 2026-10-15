@@ -100,6 +100,11 @@ export interface RendererState {
   stereoPairs: number[][];
   /** Stereo-linked mix pairs from snapshot: 0-based mix indexes [[10, 11]] = Mix 11-12. */
   mixStereoPairs: number[][];
+  /**
+   * Ganged matrix pairs from snapshot: b3 addresses [[0x73, 0x76]] = matrix
+   * pair 1 stereo. Slots outside any pair are mono matrices.
+   */
+  matrixStereoPairs: number[][];
   /** Last routing snapshot received from the console (Active Patching data). */
   activeInputs: SnapshotInput[];
   /** Channel state (fader/mute/gain/…) from snapshots, keyed by b3. */

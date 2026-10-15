@@ -78,13 +78,18 @@ export function b3ToLabel(b3: number): string {
   if (b3 >= 0x48 && b3 <= 0x4b) return `Group ${b3 - 0x48 + 1}`;
   if (b3 >= 0x58 && b3 <= 0x63) return `Mix ${b3 - 0x58 + 1}`;
   if (b3 === 0x68) return "Main LR";
-  // Matrix buses: 6 slots (0x73–0x78); the 3 stereo matrices occupy slot
-  // pairs — first slot of a pair is the L side, second is R (SQ Reference
-  // Guide: "3 stereo matrix buses which can be split to provide up to 6
-  // mono matrices").
+  // Matrix buses: 6 slots (0x73–0x78), cross-paired per the ParamData header
+  // @93 (confirmed by controlled dumps — SQ-PROTOCOL.md §8.5): the L buses
+  // are 0x73–0x75 and the R buses are 0x76–0x78 (pair 1 = 0x73+0x76,
+  // pair 2 = 0x74+0x77, pair 3 = 0x75+0x78). A ganged stereo matrix occupies
+  // both buses of its pair; a split matrix frees the R bus as an independent
+  // mono matrix (the L/R suffix then reflects the slot's position in the
+  // stereo layout, not the current ganged state).
   if (b3 >= 0x73 && b3 <= 0x78) {
     const slot = b3 - 0x73;
-    return `Matrix ${Math.floor(slot / 2) + 1} ${slot % 2 === 0 ? "L" : "R"}`;
+    return slot < 3
+      ? `Matrix ${slot + 1} L`
+      : `Matrix ${slot - 2} R`;
   }
   return `b3 0x${b3.toString(16).padStart(2, "0")}`;
 }
@@ -144,6 +149,13 @@ export interface RoutingSnapshot {
   stereoPairs: number[][];
   /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
   mixStereoPairs: number[][];
+  /**
+   * Ganged matrix pairs as b3 addresses from the ParamData header (@93):
+   * [[0x73, 0x76]] = matrix pair 1 is stereo (L bus 0x73, R bus 0x76).
+   * Unlisted slots are mono matrices (a split stereo matrix frees its R bus
+   * as an independent mono matrix).
+   */
+  matrixStereoPairs: number[][];
   /** Mix bus names 1-12 (index 0 = Mix 1), from the ParamData name blocks. */
   mixNames: string[];
   /** FX return names 1-4 (index 0 = FX 1), from the ParamData name blocks. */
@@ -185,6 +197,13 @@ export class RoutingModel {
 
   /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
   mixStereoPairs: number[][] = [];
+
+  /**
+   * Ganged matrix pairs as b3 addresses (ParamData header @93):
+   * [[0x73, 0x76]] = matrix pair 1 stereo. Empty = all six slots are mono
+   * matrices. Filled from the ParamData blob (see stereo-links.ts).
+   */
+  matrixStereoPairs: number[][] = [];
 
   /**
    * Try to decode a DSP frame as a patch frame. Returns true if it was a
@@ -327,6 +346,7 @@ export class RoutingModel {
       outputs: [...this.outputPatches],
       stereoPairs: [...this.stereoPairs],
       mixStereoPairs: this.mixStereoPairs.map((p) => [...p]),
+      matrixStereoPairs: this.matrixStereoPairs.map((p) => [...p]),
       mixNames,
       fxNames,
       matrixNames,
@@ -344,5 +364,6 @@ export class RoutingModel {
     this.names.clear();
     this.stereoPairs = [];
     this.mixStereoPairs = [];
+    this.matrixStereoPairs = [];
   }
 }

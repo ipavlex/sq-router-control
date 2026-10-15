@@ -133,6 +133,7 @@ window.sq.onRouting((snapshot: SnapshotPayload) => {
   monitor.updateChannelNames(snapshot.inputs);
   monitor.updateMixNames(snapshot.mixNames ?? []);
   monitor.updateMixStereoPairs(snapshot.mixStereoPairs ?? []);
+  monitor.updateMatrixStereoPairs(snapshot.matrixStereoPairs ?? []);
   monitor.updateFxNames(snapshot.fxNames ?? []);
   monitor.updateMatrixNames(snapshot.matrixNames ?? []);
   monitor.updateGroupNames(snapshot.groupNames ?? []);

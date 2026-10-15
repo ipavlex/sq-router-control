@@ -94,6 +94,7 @@ export const state: RendererState = {
   modelSpec: null,
   stereoPairs: [],
   mixStereoPairs: [],
+  matrixStereoPairs: [],
   activeInputs: [],
   channelStates: new Map(),
   currentSceneName: null,

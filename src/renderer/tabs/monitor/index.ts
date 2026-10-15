@@ -10,9 +10,13 @@
  * FX returns (FX 1-4) are stereo sources: the L side is routed to the L
  * output, the R side to the R output.
  *
- * Matrices (3 stereo buses on the SQ, slot pairs at b3 0x73-0x78) follow the
- * same L/R pattern: the matrix's L slot patches into the L output, the R
- * slot into the R output (regular output-patch frames, like mixes).
+ * Matrices (six buses at b3 0x73-0x78, cross-paired: L = 0x73-0x75,
+ * R = 0x76-0x78) follow the same L/R pattern when ganged: the matrix's L slot
+ * patches into the L output, the R slot into the R output (regular
+ * output-patch frames, like mixes). Slots not ganged into a pair are mono
+ * matrices — each routes to BOTH L/R outputs like a mono mix. The button set
+ * is built from the snapshot's matrixStereoPairs (ParamData header @93), so
+ * it varies between 3 stereo and up to 6 mono matrices.
  *
  * Group buses (Group 1-4, b3 0x48-0x4b) are separate mono audio buses
  * (subgroups); a group click routes it to BOTH L/R outputs like a mono mix.
@@ -26,7 +30,11 @@
  */
 import { elementRefs, state } from "../../core/utils";
 import { dbToPercent, meterClassName } from "../../core/meters";
-import { matrixButtonLabels } from "./matrix-names";
+import {
+  matrixButtonSpecs,
+  MATRIX_BASE_B3,
+  type MatrixButtonSpec,
+} from "./matrix-names";
 import type { SnapshotInput, SnapshotOutput, MetersPayload, OutputKey } from "../../../shared/ipc";
 import type { OutputOption, Dest, MixItem } from "./types";
 
@@ -503,11 +511,17 @@ function planActiveSelection(): PlannedSend[] {
   } else if (paflActive) {
     plan.push({ side: "L", dest: L, kind: "pafl" });
     plan.push({ side: "R", dest: R, kind: "pafl" });
-  } else if (activeMatrixIndex !== null) {
-    const lSlot = matrixSlotB3(activeMatrixIndex, "L");
-    const rSlot = matrixSlotB3(activeMatrixIndex, "R");
-    plan.push({ side: "L", dest: L, kind: "bus", sourceB3: lSlot });
-    plan.push({ side: "R", dest: R, kind: "bus", sourceB3: rSlot });
+  } else if (activeMatrixIndex !== null && matrixSpecs[activeMatrixIndex]) {
+    const spec = matrixSpecs[activeMatrixIndex];
+    if (spec.b3R !== null) {
+      // Stereo matrix: L slot → L output, R slot → R output.
+      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: spec.b3L });
+      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: spec.b3R });
+    } else {
+      // Mono matrix: the single bus feeds both outputs (like a mono mix).
+      plan.push({ side: "L", dest: L, kind: "bus", sourceB3: spec.b3L });
+      plan.push({ side: "R", dest: R, kind: "bus", sourceB3: spec.b3L });
+    }
   } else if (activeSourceB3 !== null) {
     plan.push({ side: "L", dest: L, kind: "bus", sourceB3: activeSourceB3 });
     plan.push({ side: "R", dest: R, kind: "bus", sourceB3: activeSourceB3 });
@@ -533,7 +547,8 @@ async function sendPlanned(p: PlannedSend): Promise<void> {
  *   mono channel        → source → both L and R outs
  *   FX return           → L side → L out, R side → R out
  *   PAFL                → PAFL L → L out, PAFL R → R out (monitor patch)
- *   Matrix              → L slot (b3) → L out, R slot → R out (output patch)
+ *   Matrix (stereo)     → L slot (b3) → L out, R slot → R out (output patch)
+ *   Matrix (mono)       → slot (b3) → both L and R outs (output patch)
  *   mix / Main LR       → source → both L and R outs
  * A deselection never changes the routing — the outputs keep the last source.
  * The debug readout always reflects the plan, even when sending is off.
@@ -843,28 +858,32 @@ function buildFxButtons(): void {
     btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
-  // Matrix sources: 3 stereo matrices (slot pairs at b3 0x73-0x78) — same
-  // row, after the FX returns. First matrix starts a new group. L slot → L
-  // output, R slot → R output on click.
-  const matrixLabels = matrixButtonLabels(lastMatrixNames);
-  for (let i = 0; i < MATRIX_COUNT; i++) {
+  // Matrix sources: buttons built from the snapshot's ganged pairs — a
+  // stereo matrix routes L slot → L output / R slot → R output, a mono
+  // matrix routes its single bus to both outputs. First matrix starts a new
+  // group (extra gap from the FX returns).
+  matrixSpecs = matrixButtonSpecs(lastMatrixNames, state.matrixStereoPairs);
+  matrixSpecs.forEach((spec, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
     // First matrix starts a new group — extra gap from the FX returns.
     btn.className = i === 0 ? "mtx-btn src-break" : "mtx-btn";
     btn.dataset.mtx = String(i);
-    btn.title = `Матрица ${i + 1} (L/R) → выбранные выходы`;
+    btn.title =
+      spec.b3R !== null
+        ? `Матрица ${i + 1} (стерео, L/R) → выбранные выходы`
+        : `Матрица ${i + 1} (моно) → оба выбранных выхода`;
     const numEl = document.createElement("span");
     numEl.className = "mtx-btn-num";
     numEl.textContent = `Mtx ${i + 1}`;
     btn.appendChild(numEl);
     const nameEl = document.createElement("span");
     nameEl.className = "mtx-btn-name";
-    nameEl.textContent = matrixLabels[i] ?? "";
+    nameEl.textContent = spec.name;
     btn.appendChild(nameEl);
     btn.addEventListener("click", () => onMatrixClick(i, btn));
     container.appendChild(btn);
-  }
+  });
   updateSourceLock();
 }
 
@@ -902,25 +921,23 @@ async function onPaflClick(btn: HTMLButtonElement): Promise<void> {
 // ── matrix source buttons ────────────────────────────────────────────
 
 /**
- * Matrix buses: the SQ features 3 stereo matrices that can be split into up
- * to 6 mono ones. All six slots are addressable at b3 0x73–0x78 — a stereo
- * matrix occupies a slot pair (first slot = L side, second = R side), split
- * mono matrices use the slots independently. Routing follows the FX-return
- * pattern: L slot → L output, R slot → R output (regular output patches).
+ * Matrix buses: the SQ features six matrix buses at b3 0x73–0x78, cross-
+ * paired (L = 0x73–0x75, R = 0x76–0x78; confirmed by the ParamData header
+ * @93 — see matrix-names.ts). A ganged (stereo) matrix occupies both buses
+ * of its pair and routes L slot → L output, R slot → R output; a split mono
+ * matrix uses its slot independently and routes to BOTH L/R outputs (like a
+ * mono mix). The button set is rebuilt from the snapshot's
+ * matrixStereoPairs, so it varies between 3 stereo and up to 6 mono buttons.
  */
-const MATRIX_BASE_B3 = 0x73;
-const MATRIX_COUNT = 3;
+
+/** Button descriptors for the current snapshot (index = button order). */
+let matrixSpecs: MatrixButtonSpec[] = [];
 
 /** Index of the currently selected matrix (0-based), or null. */
 let activeMatrixIndex: number | null = null;
 
-/** Latest matrix slot names (index 0 = slot Matrix1-L, i.e. b3 0x73), from the snapshot. */
+/** Latest matrix slot names (index 0 = slot b3 0x73), from the snapshot. */
 let lastMatrixNames: string[] = [];
-
-/** b3 of the L slot of matrix index (0-based); the R slot follows at +1. */
-function matrixSlotB3(matrixIndex: number, side: "L" | "R"): number {
-  return MATRIX_BASE_B3 + matrixIndex * 2 + (side === "R" ? 1 : 0);
-}
 
 /** Clear the matrix selection and highlight. */
 function clearMatrixSelection(): void {
@@ -931,8 +948,9 @@ function clearMatrixSelection(): void {
 }
 
 /**
- * Matrix click handler — routes the matrix like a stereo pair:
- * L slot → L output, R slot → R output (regular output-patch frames).
+ * Matrix click handler — routes the matrix per its spec:
+ *   stereo → L slot → L output, R slot → R output (regular output patches);
+ *   mono   → the single bus → both L/R outputs (like a mono mix).
  * Clicking the active matrix keeps it selected (no-op; ESC clears).
  */
 async function onMatrixClick(matrixIndex: number, btn: HTMLButtonElement): Promise<void> {
@@ -953,18 +971,41 @@ async function onMatrixClick(matrixIndex: number, btn: HTMLButtonElement): Promi
 
 /**
  * Update only the names of the existing matrix buttons (without rebuilding
- * the DOM, so the active highlight survives routing updates). Slot names are
- * collapsed and handed out in order (see `matrixButtonLabels`) so a name on
- * an odd (R) slot is not dropped.
+ * the DOM, so the active highlight survives routing updates). Specs are
+ * recomputed from the current pairs, so each button picks up the name of its
+ * own L slot (or the R-slot fallback for a ganged pair).
  */
 export function updateMatrixNames(names: string[]): void {
   lastMatrixNames = names;
-  const labels = matrixButtonLabels(names);
+  matrixSpecs = matrixButtonSpecs(names, state.matrixStereoPairs);
   for (const btn of elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".mtx-btn")) {
     const mtxIdx = Number(btn.dataset.mtx);
+    const spec = matrixSpecs[mtxIdx];
+    if (!spec) continue;
     const nameEl = btn.querySelector(".mtx-btn-name");
-    if (nameEl) nameEl.textContent = labels[mtxIdx] ?? "";
+    if (nameEl) nameEl.textContent = spec.name;
+    btn.title =
+      spec.b3R !== null
+        ? `Матрица ${mtxIdx + 1} (стерео, L/R) → выбранные выходы`
+        : `Матрица ${mtxIdx + 1} (моно) → оба выбранных выхода`;
   }
+}
+
+/**
+ * Apply the ganged matrix pairs decoded from the ParamData header (@93).
+ * Rebuilds the matrix buttons when the set changes: a stereo matrix shows
+ * one L/R button, a split matrix frees its R slot as an additional mono
+ * button (3 stereo ↔ up to 6 mono).
+ */
+export function updateMatrixStereoPairs(pairs: number[][]): void {
+  const before = JSON.stringify(state.matrixStereoPairs);
+  const next = pairs.map((p) => [...p]);
+  if (before === JSON.stringify(next)) return;
+  state.matrixStereoPairs = next;
+  // The button count/layout changes — drop a matrix selection that may point
+  // at a different slot layout, then rebuild the row.
+  clearMatrixSelection();
+  buildFxButtons();
 }
 
 // ── channel buttons ─────────────────────────────────────────────────
@@ -1275,6 +1316,7 @@ export function reset(): void {
   buildChannelButtons();
   lastFxNames = []; // fresh session — no stale FX names
   lastMatrixNames = []; // fresh session — no stale matrix names
+  state.matrixStereoPairs = []; // fresh session — all matrices mono until the snapshot
   buildFxButtons();
   // Main LR active by default (UI-only — no command sent unless enabled)
   activeSourceB3 = 0x68;

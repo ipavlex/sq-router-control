@@ -58,7 +58,7 @@ describe("describeOffset", () => {
 
   it("decodes a matrix block offset", () => {
     const mtx = 884 + 0x75 * 336 + 100;
-    assert.match(describeOffset(mtx), /Matrix 2 L \(b3 0x75\).*\+100/);
+    assert.match(describeOffset(mtx), /Matrix 3 L \(b3 0x75\).*\+100/);
   });
 
   it("decodes the input stereo-link table entries", () => {

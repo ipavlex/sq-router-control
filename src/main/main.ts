@@ -839,6 +839,20 @@ class SQController {
       }
     });
 
+    // Ganged matrix pairs from the ParamData header (@93): [[0x73, 0x76]] =
+    // matrix pair 1 stereo; unlisted slots are mono matrices.
+    conn.on("matrixStereoPairs", (pairs: number[][]) => {
+      this.model.matrixStereoPairs = pairs;
+      dirty = true;
+      const list = pairs
+        .map((p) => `0x${p[0].toString(16)}+0x${p[1].toString(16)}`)
+        .join(", ");
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Matrix pairs ganged (ParamData @93): ${list || "none (6 mono)"}`,
+      });
+    });
+
     // Stereo-linked non-input buses (matrices/Main LR) from the link region.
     conn.on("busLinks", (buses: number[]) => {
       this.send("sq:log", {

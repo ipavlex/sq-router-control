@@ -1,33 +1,74 @@
 /**
- * Unit tests for the Monitor tab matrix-button labels (MON-B6).
+ * Unit tests for the Monitor tab matrix-button specs (MON-B5/B6).
+ *
+ * The confirmed pair layout (ParamData header @93) is cross-paired:
+ * pair 1 = 0x73+0x76, pair 2 = 0x74+0x77, pair 3 = 0x75+0x78 — the L buses
+ * are 0x73–0x75, the R buses are 0x76–0x78.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { matrixButtonLabels } from "../matrix-names";
+import { matrixButtonSpecs, MATRIX_BASE_B3 } from "../matrix-names";
 
-describe("matrixButtonLabels", () => {
-  it("keeps consecutively named mono slots without skipping", () => {
-    assert.deepEqual(
-      matrixButtonLabels(["MainPA", "FrntFl", "YouTMx", "", "", ""]),
-      ["MainPA", "FrntFl", "YouTMx"]
+describe("matrixButtonSpecs", () => {
+  it("builds one stereo button per ganged pair, named from the L slot", () => {
+    const specs = matrixButtonSpecs(
+      ["A", "B", "C", "A", "B", "C"],
+      [
+        [0x73, 0x76],
+        [0x74, 0x77],
+        [0x75, 0x78],
+      ]
     );
+    assert.equal(specs.length, 3);
+    assert.deepEqual(specs[0], { b3L: 0x73, b3R: 0x76, name: "A" });
+    assert.deepEqual(specs[1], { b3L: 0x74, b3R: 0x77, name: "B" });
+    assert.deepEqual(specs[2], { b3L: 0x75, b3R: 0x78, name: "C" });
   });
 
-  it("collapses a stereo pair named on both slots to one label", () => {
-    assert.deepEqual(
-      matrixButtonLabels(["A", "A", "B", "B", "C", "C"]),
-      ["A", "B", "C"]
-    );
+  it("builds six mono buttons when no pair is ganged", () => {
+    const specs = matrixButtonSpecs(["MainPA", "FrntFl", "YouTMx", "", "", ""], []);
+    assert.equal(specs.length, 6);
+    assert.deepEqual(specs[0], { b3L: 0x73, b3R: null, name: "MainPA" });
+    assert.deepEqual(specs[1], { b3L: 0x74, b3R: null, name: "FrntFl" });
+    assert.deepEqual(specs[2], { b3L: 0x75, b3R: null, name: "YouTMx" });
+    for (const s of specs.slice(3)) {
+      assert.equal(s.b3R, null);
+      assert.equal(s.name, "");
+    }
   });
 
-  it("keeps stereo names stored on the first slot only", () => {
-    assert.deepEqual(
-      matrixButtonLabels(["A", "", "B", "", "C", ""]),
-      ["A", "B", "C"]
+  it("mixes stereo pairs and freed mono slots in slot order", () => {
+    // Pair 1 ganged; slots 0x74/0x75 split to mono; pair 3 ganged.
+    const specs = matrixButtonSpecs(
+      ["Subs", "Lobby", "Fill", "Subs", "", "Feed"],
+      [
+        [0x73, 0x76],
+        [0x77, 0x78],
+      ]
     );
+    assert.equal(specs.length, 4);
+    assert.deepEqual(specs[0], { b3L: 0x73, b3R: 0x76, name: "Subs" });
+    assert.deepEqual(specs[1], { b3L: 0x74, b3R: null, name: "Lobby" });
+    assert.deepEqual(specs[2], { b3L: 0x75, b3R: null, name: "Fill" });
+    assert.deepEqual(specs[3], { b3L: 0x77, b3R: 0x78, name: "Feed" });
   });
 
-  it("returns no labels when no slot is named", () => {
-    assert.deepEqual(matrixButtonLabels(["", "", "", "", "", ""]), []);
+  it("falls back to the R-slot name for a ganged pair with an unnamed L slot", () => {
+    const specs = matrixButtonSpecs(["", "", "", "Subs", "", ""], [[0x73, 0x76]]);
+    assert.equal(specs.length, 5);
+    assert.deepEqual(specs[0], { b3L: 0x73, b3R: 0x76, name: "Subs" });
+  });
+
+  it("keeps the R slot of a ganged pair even when it carries its own name", () => {
+    // A stale name on the R slot must not produce an extra mono button.
+    const specs = matrixButtonSpecs(["A", "", "", "A", "Ghost", ""], [[0x73, 0x76]]);
+    assert.equal(specs.length, 5);
+    assert.equal(specs.some((s) => s.b3L === 0x76), false);
+  });
+
+  it("covers all six slots starting at b3 0x73", () => {
+    const specs = matrixButtonSpecs(["", "", "", "", "", ""], []);
+    assert.equal(specs.length, 6);
+    assert.equal(specs[5].b3L, MATRIX_BASE_B3 + 5);
   });
 });

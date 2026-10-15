@@ -97,13 +97,22 @@ export interface SnapshotPayload {
   stereoPairs: number[][];
   /** Stereo-linked mix pairs as 0-based mix indexes: [[10, 11]] = Mix 11-12. */
   mixStereoPairs?: number[][];
+  /**
+   * Ganged matrix pairs as b3 addresses (ParamData header @93):
+   * [[0x73, 0x76]] = matrix pair 1 stereo (L bus 0x73, R bus 0x76). Slots not
+   * listed in any pair are mono matrices (a split stereo matrix frees its
+   * R bus as an independent mono matrix).
+   */
+  matrixStereoPairs?: number[][];
   /** Mix bus names 1-12 (index 0 = Mix 1), from the console's ParamData. */
   mixNames?: string[];
   /** FX return names 1-4 (index 0 = FX 1), from the console's ParamData. */
   fxNames?: string[];
   /**
-   * Matrix slot names for b3 0x73-0x78 (index 0 = slot Matrix1-L). The 3
-   * stereo matrices occupy slot pairs: Matrix N = indexes 2(N-1), 2(N-1)+1.
+   * Matrix slot names for b3 0x73-0x78 (index 0 = slot b3 0x73). With the
+   * confirmed pair layout the L buses are 0x73-0x75 and the R buses are
+   * 0x76-0x78; a stereo matrix carries its name on the L slot (see
+   * matrixStereoPairs).
    */
   matrixNames?: string[];
   /** Group bus names 1-4 (index 0 = Group 1, b3 0x48-0x4b). */

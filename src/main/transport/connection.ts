@@ -39,6 +39,7 @@ import { modelName } from "../models";
 import {
   decodeStereoPairs,
   decodeMixStereoPairs,
+  decodeMatrixStereoPairs,
   decodeLinkedBuses,
 } from "../stereo-links";
 import {
@@ -638,6 +639,11 @@ export class Connection extends EventEmitter {
     // Mix bus stereo mode (byte +331 of each mix channel block). Separate from
     // the input link table — mixes are configured stereo/mono individually.
     this.emit("mixStereoPairs", decodeMixStereoPairs(payload));
+
+    // Ganged matrix pairs from the blob header (@93): [[0x73, 0x76]] = matrix
+    // pair 1 stereo; unlisted slots are mono matrices. Authoritative source —
+    // the link-region A-pairs are sticky and NOT used here.
+    this.emit("matrixStereoPairs", decodeMatrixStereoPairs(payload));
 
     // Encoding-A stereo links for non-input buses (matrices, mixes, Main LR),
     // decoded from the same blob region. Used for diagnostics only for now.

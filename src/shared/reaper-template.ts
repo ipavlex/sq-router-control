@@ -84,7 +84,9 @@ function resolveName(snapshot: SnapshotPayload, label: string, info: SourceInfo)
     case "fx":
       return clean(snapshot.fxNames?.[info.index - 1]) || label;
     case "matrix": {
-      const slot = (info.index - 1) * 2 + (info.side === "R" ? 1 : 0);
+      // Cross-paired matrix slots (ParamData header @93): the L buses are
+      // 0x73–0x75 (indexes 0–2) and the R buses are 0x76–0x78 (indexes 3–5).
+      const slot = info.index - 1 + (info.side === "R" ? 3 : 0);
       return clean(snapshot.matrixNames?.[slot]) || label;
     }
     default:
