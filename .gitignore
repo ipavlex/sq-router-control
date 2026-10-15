@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+pd-dumps/
 *.log
 .DS_Store
 .idea/

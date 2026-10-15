@@ -5,6 +5,33 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.20.0] — 2026-10-15
+
+### Добавлено
+- CLI-тула **`sq-dump`** (`npm run sq-dump -- …`, `tools/sq-dump.ts`) для
+  контролируемых дампов без запуска приложения — реализует «ускоритель» из
+  `docs/VERIFY-STEREO-MODES.md` §5:
+  - `capture <host> [--label N] [--out dir]` — отдельное TCP-соединение к
+    пульту, ожидание ParamData (~97 КБ), сохранение дампа с меткой времени
+    (`pd-dumps/`, git-ignored) + полный отчёт диагностики; в терминал —
+    модель/прошивка, режимы миксов и список стерео-линкованных шин;
+  - `diff <a.bin> <b.bin>` — побайтовый diff с расшифровкой каждого
+    изменившегося адреса (блок канала b3 +offset и имя поля, fader/send-секция,
+    preamp, link-таблица входов, регион линков шин) и вердиктами для чистых
+    экспериментов (одиночное изменение `+331` у микса → «polarity 1 = stereo
+    CONFIRMED»; изменения только в регионе линков шин → «чистый эксперимент
+    по матрицам/группам»);
+  - `info <file.bin>` — полный отчёт (секции «Bus mono/stereo mode»,
+    «Group buses», «Bus link regions»).
+- Чистый модуль `src/main/paramdata-diff.ts` (diff + карта офсетов ParamData)
+  с тестами (13 новых, всего 135).
+
+### Изменено
+- `tsconfig.json` включает `tools/` в typecheck; скрипт `sq-dump` в
+  `package.json`; `pd-dumps/` в `.gitignore`.
+- Документация: `VERIFY-STEREO-MODES.md` переписана под тулу (§2, §3, §5) —
+  снимок baseline → смена одной настройки на пульте → снимок → `diff`.
+
 ## [1.19.0] — 2026-10-15
 
 ### Добавлено
