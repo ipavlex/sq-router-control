@@ -1839,8 +1839,8 @@ h2.stereo-diff:hover::after {
 }
 
 .mon-out-btn.selected {
-  border-color: var(--accent);
-  background: rgba(79, 156, 249, 0.14);
+  border-color: var(--amber);
+  background: rgba(245, 176, 66, 0.14);
   color: var(--text);
 }
 
