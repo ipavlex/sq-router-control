@@ -16,6 +16,7 @@
 | [`LOG-TAB.md`](LOG-TAB.md) | Вкладка «Журнал»: уровни, метки, источники записей |
 | [`SQ-PROTOCOL.md`](SQ-PROTOCOL.md) | Бинарный протокол SQ: кадры, регистры, ParamData, метры |
 | [`SQ-DUMP.md`](SQ-DUMP.md) | CLI-тула `sq-dump`: контролируемые дампы ParamData и diff |
+| [`SQ-METERS.md`](SQ-METERS.md) | CLI-тула `sq-meters`: живой Metro-поток, дампы форм пакетов, офлайн-разбор |
 | [`../README.md`](../README.md) | Краткий обзор возможностей и запуска |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | История изменений |
 

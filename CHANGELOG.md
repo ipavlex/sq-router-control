@@ -5,6 +5,20 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.24.0] — 2026-10-16
+
+### Добавлено
+- CLI-тула `sq-meters` (`npm run sq-meters`) — обработка UDP-метро-потока
+  без приложения, по образцу `sq-dump`. Три команды: `watch` (живой вид
+  входов / Main LR / Mix 1–12 + инвентарь форм пакетов с hot/chg-снимками
+  недекодированных форм раз в ~4 с), `capture` (дампы по одному сырому
+  `.bin` на форму пакета + `report.txt` в `meter-dumps/cap-<ts>[-label]/`)
+  и `decode` (офлайн-разбор дейтаграммы, совместим с дампами приложения
+  из `<userData>/diagnostics`, `--full` — все слоты).
+- Документация `docs/SQ-METERS.md` (команды, методика охоты за слотами
+  недекодированных пакетов `0x07`/`0x09`/`0x16`, формат файлов), ссылки
+  в `AGENTS.md` и `docs/ARCHITECTURE.md`, npm-скрипт `sq-meters`.
+
 ## [1.23.2] — 2026-10-16
 
 ### Изменено

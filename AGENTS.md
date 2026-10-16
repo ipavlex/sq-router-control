@@ -23,6 +23,7 @@ Electron-приложение для мониторинга и управлен�
 | `npm run typecheck` | `tsc --noEmit` — **единственная** проверка типов |
 | `npm test` | Юнит-тесты чистых декодеров (`node --test` + `tsx`, без пульта) |
 | `npm run sq-dump -- capture <host> [--label N]` / `diff A B` / `info F` | CLI-тула дампов ParamData для проверки без приложения (см. `docs/SQ-DUMP.md`) |
+| `npm run sq-meters -- watch <host>` / `capture <host>` / `decode F` | CLI-тула UDP-метров: живой вид, дампы форм пакетов, офлайн-разбор (см. `docs/SQ-METERS.md`) |
 | `npm start` | `build` + `electron .` |
 | `npm run dev` | `build:dev` + `electron . --enable-logging` |
 | `npm run pack` / `dist` | Сборка в `release/` (без установщика / с установщиками) |

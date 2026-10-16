@@ -1,6 +1,6 @@
 {
   "name": "sq-router-control",
-  "version": "1.23.2",
+  "version": "1.24.0",
   "description": "Electron app to connect to an Allen & Heath SQ mixing console and display its current routing",
   "main": "dist/main/main.js",
   "author": "",
@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "sq-dump": "tsx tools/sq-dump.ts",
+    "sq-meters": "tsx tools/sq-meters.ts",
     "clean": "rm -rf dist",
     "start": "npm run build && electron .",
     "dev": "npm run build:dev && electron . --enable-logging",
