@@ -133,6 +133,12 @@ export interface InputPatch {
 export interface OutputPatch {
   kind: "bus" | "fx" | "monitor";
   sourceLabel: string;
+  /**
+   * Source bus b3 of the patch frame (kind "bus"). For the right half of a
+   * console-linked stereo pair this is the MASTER b3 (the frame addresses the
+   * master with modifier 0x10) — while sourceLabel names the slave channel.
+   */
+  sourceB3?: number;
   dest: number;
   destLabel: string;
   destChannel: number;
@@ -167,6 +173,13 @@ export interface RoutingSnapshot {
   matrixNames: string[];
   /** Group bus names 1-4 (index 0 = Group 1, b3 0x48–0x4b). */
   groupNames: string[];
+  /**
+   * Bus composition from the ParamData header (@61/@65): number of aux and
+   * group buses of the 12-slot mix pool (aux + groups ≤ 12). null = not yet
+   * decoded (the UI falls back to the full 12 mixes / 4 groups layout).
+   */
+  auxCount: number | null;
+  groupCount: number | null;
   /** number of routing update frames received. */
   updates: number;
   /** last routing/config block (sub=0x10) byte length, if any. */
@@ -204,6 +217,14 @@ export class RoutingModel {
    * matrices. Filled from the ParamData blob (see stereo-links.ts).
    */
   matrixStereoPairs: number[][] = [];
+
+  /**
+   * Bus composition from the ParamData header (@61/@65): aux / group counts
+   * of the 12-slot mix pool. null until the blob is decoded (demo sets them
+   * directly; the UI falls back to 12 mixes / 4 groups while null).
+   */
+  auxCount: number | null = null;
+  groupCount: number | null = null;
 
   /**
    * Try to decode a DSP frame as a patch frame. Returns true if it was a
@@ -244,9 +265,15 @@ export class RoutingModel {
     if (modifier === 0x0f || modifier === 0x10) {
       const sourceB3 = ch;
       const dest = valHi;
+      // Right half of a console-linked stereo pair: the frame carries the
+      // MASTER b3 with modifier 0x10, but the label names the slave channel
+      // (master+1) — "Input 15" / "Input 16" read as two distinct sources.
+      const labelB3 =
+        modifier === 0x10 && sourceB3 <= 0x2f ? sourceB3 + 1 : sourceB3;
       const record: OutputPatch = {
         kind: "bus",
-        sourceLabel: b3ToLabel(sourceB3),
+        sourceLabel: b3ToLabel(labelB3),
+        sourceB3,
         dest,
         destLabel: OUTPUT_DEST_LABEL[dest] ?? `Dest 0x${dest.toString(16)}`,
         destChannel: valLo + 1,
@@ -351,6 +378,8 @@ export class RoutingModel {
       fxNames,
       matrixNames,
       groupNames,
+      auxCount: this.auxCount,
+      groupCount: this.groupCount,
       updates: this.updates,
       routingBlockBytes: this.routingBlockBytes,
     };
@@ -365,5 +394,7 @@ export class RoutingModel {
     this.stereoPairs = [];
     this.mixStereoPairs = [];
     this.matrixStereoPairs = [];
+    this.auxCount = null;
+    this.groupCount = null;
   }
 }

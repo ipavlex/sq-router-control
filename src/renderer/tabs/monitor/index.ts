@@ -33,6 +33,7 @@ import { dbToPercent, meterClassName } from "../../core/meters";
 import {
   matrixButtonSpecs,
   MATRIX_BASE_B3,
+  MATRIX_SLOT_COUNT,
   type MatrixButtonSpec,
 } from "./matrix-names";
 import type { SnapshotInput, SnapshotOutput, MetersPayload, OutputKey } from "../../../shared/ipc";
@@ -234,13 +235,34 @@ export function updateOutputUsage(outputs: SnapshotOutput[]): void {
   updateLockPanelUsage();
 }
 
+/**
+ * Button-consistent label for a matrix-slot source: "Mtx N" for a mono
+ * matrix, "Mtx N L" / "Mtx N R" for the sides of a stereo one — numbering
+ * matches the monitor's Mtx buttons (matrixSpecs), unlike the static
+ * slot-based "Matrix N L/R" from the main process. Null for non-matrix
+ * sources or slots that currently have no button.
+ */
+function matrixUsageLabel(out: SnapshotOutput): string | null {
+  const b3 = out.sourceB3;
+  if (b3 === undefined || b3 < MATRIX_BASE_B3 || b3 >= MATRIX_BASE_B3 + MATRIX_SLOT_COUNT) {
+    return null;
+  }
+  const idx = matrixSpecs.findIndex((s) => s.b3L === b3 || s.b3R === b3);
+  if (idx < 0) return null;
+  const spec = matrixSpecs[idx];
+  return spec.b3R !== null
+    ? `Mtx ${idx + 1} ${b3 === spec.b3L ? "L" : "R"}`
+    : `Mtx ${idx + 1}`;
+}
+
 /** destType:destChannel (decimal) → routed source label(s), joined on conflict. */
 function outputUsageMap(): Map<string, string> {
   const byKey = new Map<string, string>();
   for (const out of lastOutputs ?? []) {
     const key = `${out.dest}:${out.destChannel}`;
+    const label = matrixUsageLabel(out) ?? out.sourceLabel;
     const prev = byKey.get(key);
-    byKey.set(key, prev ? `${prev} + ${out.sourceLabel}` : out.sourceLabel);
+    byKey.set(key, prev ? `${prev} + ${label}` : label);
   }
   return byKey;
 }
@@ -397,24 +419,57 @@ function updateLockPanelUsage(): void {
 }
 
 /** Compose an option label: base name + routed source + safe marker. */
-function refreshOptionLabel(opt: HTMLOptionElement, byKey: Map<string, string>): void {
+function refreshOptionLabel(
+  opt: HTMLOptionElement,
+  byKey: Map<string, string>,
+  override?: string | null
+): void {
   if (!opt.value) return; // "— не выбран —" placeholder
   const [destTypeHex, chStr] = opt.value.split(":");
   const key = `${parseInt(destTypeHex, 16)}:${Number(chStr)}`;
   const base = opt.dataset.baseLabel || opt.textContent || "";
   opt.dataset.baseLabel = base;
-  const src = byKey.get(key);
+  // The side-aware label (for the option chosen in this select) replaces the
+  // snapshot label — the console frames don't distinguish Main LR / stereo
+  // mix halves, the monitor tab does.
+  const src = override ?? byKey.get(key);
   let label = src ? `${base} · ${src}` : base;
   if (lockedOutputs.has(key)) label += " · 🔒";
   opt.textContent = label;
+}
+
+/**
+ * Side-aware source label for the output currently chosen in an L/R select,
+ * or null when there is nothing to override. Only sources whose console
+ * frames don't distinguish sides need this: Main LR and stereo mixes (both
+ * halves patch the same b3 with modifier 0x0F). Channels, FX, matrices and
+ * PAFL already carry per-output labels in the snapshot records.
+ */
+function chosenSideLabel(side: "L" | "R"): string | null {
+  if (!monEnabled() || activeSourceB3 === null) return null;
+  if (activeSourceB3 === 0x68) return side === "L" ? "Main L" : "Main R";
+  if (activeSourceB3 >= 0x58 && activeSourceB3 <= 0x63) {
+    const mixIdx = activeSourceB3 - 0x58;
+    if (isMixStereo(mixIdx)) return `Mix ${mixIdx + 1} ${side}`;
+  }
+  return null; // mono mix / group — the record label is already correct
 }
 
 /** Rewrite option labels as "base · source" for outputs present in the routing. */
 function applyOutputUsage(): void {
   if (!lastOutputs) return;
   const byKey = outputUsageMap();
-  for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
-    for (const opt of sel.options) refreshOptionLabel(opt, byKey);
+  for (const [sel, side] of [
+    [elementRefs.monLDest, "L"],
+    [elementRefs.monRDest, "R"],
+  ] as const) {
+    const override = chosenSideLabel(side);
+    for (const opt of sel.options) {
+      // The side label applies only to the option chosen in this select —
+      // other occurrences of the same source keep their snapshot labels.
+      const isChosen = !!opt.value && opt.value === sel.value;
+      refreshOptionLabel(opt, byKey, isChosen ? override : null);
+    }
   }
 }
 
@@ -425,13 +480,18 @@ function applyOutputUsage(): void {
  */
 function applySafeOutputLock(): void {
   const byKey = lastOutputs ? outputUsageMap() : new Map<string, string>();
-  for (const sel of [elementRefs.monLDest, elementRefs.monRDest]) {
+  for (const [sel, side] of [
+    [elementRefs.monLDest, "L"],
+    [elementRefs.monRDest, "R"],
+  ] as const) {
+    const override = chosenSideLabel(side);
     for (const opt of sel.options) {
       if (!opt.value) continue;
       const [destTypeHex, chStr] = opt.value.split(":");
       const key = `${parseInt(destTypeHex, 16)}:${Number(chStr)}`;
       opt.disabled = lockedOutputs.has(key);
-      refreshOptionLabel(opt, byKey);
+      const isChosen = opt.value === sel.value;
+      refreshOptionLabel(opt, byKey, isChosen ? override : null);
     }
     // The currently selected output just became safe → drop the selection.
     if (sel.value) {
@@ -706,7 +766,7 @@ let lastGroupNames: string[] = [];
  */
 export function updateGroupNames(names: string[]): void {
   lastGroupNames = names;
-  for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".grp-btn")) {
+  for (const btn of elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".grp-btn")) {
     const idx = Number(btn.dataset.b3) - GROUP_B3_FIRST;
     const nameEl = btn.querySelector(".mix-btn-name");
     if (nameEl) nameEl.textContent = names[idx] ?? "";
@@ -726,11 +786,33 @@ export function updateMixStereoPairs(pairs: number[][]): void {
   buildMixButtons();
 }
 
+/**
+ * Apply the bus composition decoded from the ParamData header (@61/@65):
+ * aux / group counts of the 12-slot mix pool. Rebuilds the mix and group
+ * buttons so only the configured buses are shown; null (not decoded yet)
+ * keeps the full 12 Mix / 4 Grp fallback layout.
+ */
+export function updateBusComposition(
+  auxCount: number | null,
+  groupCount: number | null
+): void {
+  const changed =
+    state.auxCount !== auxCount || state.groupCount !== groupCount;
+  state.auxCount = auxCount;
+  state.groupCount = groupCount;
+  if (!changed) return;
+  buildMixButtons();
+  buildFxButtons();
+}
+
 export function buildMixButtons(): void {
   const container = elementRefs.mixButtons;
   container.innerHTML = "";
+  // Only the configured aux buses get buttons (snapshot @61/@65); before the
+  // composition is known, fall back to the full 12-slot layout.
+  const auxCount = state.auxCount ?? 12;
   const items: MixItem[] = [];
-  for (let i = 0; i < 12; i++) items.push({ b3: 0x58 + i, label: `Mix ${i + 1}` });
+  for (let i = 0; i < auxCount; i++) items.push({ b3: 0x58 + i, label: `Mix ${i + 1}` });
 
   for (const item of items) {
     const btn = document.createElement("button");
@@ -754,27 +836,6 @@ export function buildMixButtons(): void {
     nameEl.textContent = lastMixNames[mixIdx] ?? "";
     btn.appendChild(nameEl);
     btn.addEventListener("click", () => toggleMixRoute(item.b3, btn));
-    container.appendChild(btn);
-  }
-
-  // Group buses 1-4 (b3 0x48-0x4b): separate mono subgroups routed to BOTH
-  // L/R outputs like a mono mix (shared toggleMixRoute path). No meter bars —
-  // group buses are not present in the decoded meter packets (0x18), so
-  // applyMeters skips them automatically (no .ch-meter children).
-  for (let i = 0; i < GROUP_COUNT; i++) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "mix-btn grp-btn";
-    btn.dataset.b3 = String(GROUP_B3_FIRST + i);
-    const numEl = document.createElement("span");
-    numEl.className = "mix-btn-num";
-    numEl.textContent = `Grp ${i + 1}`;
-    btn.appendChild(numEl);
-    const nameEl = document.createElement("span");
-    nameEl.className = "mix-btn-name";
-    nameEl.textContent = lastGroupNames[i] ?? "";
-    btn.appendChild(nameEl);
-    btn.addEventListener("click", () => toggleMixRoute(GROUP_B3_FIRST + i, btn));
     container.appendChild(btn);
   }
 
@@ -858,10 +919,35 @@ function buildFxButtons(): void {
     btn.addEventListener("click", () => onFxClick(i, btn));
     container.appendChild(btn);
   }
+  // Group buses (b3 0x48-0x4b): separate mono subgroups routed to BOTH
+  // L/R outputs like a mono mix (shared toggleMixRoute path). Sit between the
+  // FX returns and the matrices. Only the configured group buses get buttons
+  // (snapshot @61/@65; fallback 4 before the composition is known).
+  // No meter bars — group buses are not present
+  // in the decoded meter packets (0x18), so applyMeters skips them
+  // automatically (no .ch-meter children). The first group button starts a
+  // new block (extra gap from the FX returns, same as the matrices).
+  const groupCount = state.groupCount ?? GROUP_COUNT;
+  for (let i = 0; i < groupCount; i++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = i === 0 ? "mix-btn grp-btn src-break" : "mix-btn grp-btn";
+    btn.dataset.b3 = String(GROUP_B3_FIRST + i);
+    const numEl = document.createElement("span");
+    numEl.className = "mix-btn-num";
+    numEl.textContent = `Grp ${i + 1}`;
+    btn.appendChild(numEl);
+    const nameEl = document.createElement("span");
+    nameEl.className = "mix-btn-name";
+    nameEl.textContent = lastGroupNames[i] ?? "";
+    btn.appendChild(nameEl);
+    btn.addEventListener("click", () => toggleMixRoute(GROUP_B3_FIRST + i, btn));
+    container.appendChild(btn);
+  }
   // Matrix sources: buttons built from the snapshot's ganged pairs — a
   // stereo matrix routes L slot → L output / R slot → R output, a mono
   // matrix routes its single bus to both outputs. First matrix starts a new
-  // group (extra gap from the FX returns).
+  // group (extra gap from the group buses).
   matrixSpecs = matrixButtonSpecs(lastMatrixNames, state.matrixStereoPairs);
   matrixSpecs.forEach((spec, i) => {
     const btn = document.createElement("button");
@@ -978,6 +1064,15 @@ async function onMatrixClick(matrixIndex: number, btn: HTMLButtonElement): Promi
 export function updateMatrixNames(names: string[]): void {
   lastMatrixNames = names;
   matrixSpecs = matrixButtonSpecs(names, state.matrixStereoPairs);
+  // Names can change which slots count as configured (named vs unnamed free
+  // slots) — rebuild when the visible button set changes, otherwise update
+  // the existing buttons in place so the active highlight survives.
+  const btnCount =
+    elementRefs.fxButtons.querySelectorAll(".mtx-btn").length;
+  if (btnCount !== matrixSpecs.length) {
+    buildFxButtons();
+    return;
+  }
   for (const btn of elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".mtx-btn")) {
     const mtxIdx = Number(btn.dataset.mtx);
     const spec = matrixSpecs[mtxIdx];
@@ -1034,38 +1129,9 @@ let meterFrame: number | null = null;
 /** Latest applied payload — re-applied when buttons are rebuilt. */
 let lastMeters: MetersPayload | null = null;
 
-/**
- * Mixes observed carrying distinct L/R levels (mixesL ≠ mixesR beyond a
- * small threshold). Mono buses meter L and R bit-identically, so a real
- * divergence means the bus is a stereo mix. Latched for the session — a
- * stereo mix fed mono content (L == R) keeps its two bars.
- */
-const stereoObservedMixes = new Set<number>();
-/** dB difference between sides treated as a real L/R divergence. */
-const STEREO_DIVERGENCE_DB = 0.4;
-
-/**
- * Latch stereo-observed mixes from the latest payload.
- * Returns true when the set changed (mix buttons need a rebuild).
- */
-function updateStereoObservedMixes(m: MetersPayload | null): boolean {
-  if (!m?.mixesL || !m?.mixesR) return false;
-  let changed = false;
-  for (let i = 0; i < 12; i++) {
-    if (stereoObservedMixes.has(i)) continue;
-    const l = m.mixesL[i];
-    const r = m.mixesR[i];
-    if (l != null && r != null && Math.abs(l - r) >= STEREO_DIVERGENCE_DB) {
-      stereoObservedMixes.add(i);
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-/** A mix shows the stereo L/R meter: reported pair or divergence observed. */
+/** A mix shows the stereo L/R meter: reported pair from the snapshot. */
 function isMixStereo(mixIdx: number): boolean {
-  return getMixPair(mixIdx) !== null || stereoObservedMixes.has(mixIdx);
+  return getMixPair(mixIdx) !== null;
 }
 
 /**
@@ -1079,11 +1145,6 @@ export function updateMeters(p: MetersPayload | null): void {
     meterFrame = null;
     const m = pendingMeters;
     pendingMeters = null;
-    if (updateStereoObservedMixes(m)) {
-      // A mix just turned out to be stereo — rebuild its button with two
-      // bars (the rebuild re-applies the latest readings itself).
-      buildMixButtons();
-    }
     applyMeters(m);
   });
 }
@@ -1106,10 +1167,10 @@ function applyMeters(m: MetersPayload | null): void {
       applyChMeter(meters[1] ?? null, m ? m.inputs[b3r] ?? null : null, m ? !!m.clip[b3r] : false);
     }
   }
-  // Mix buses 1–12 (live from UDP packet 0x18). A stereo mix shows two
-  // bars (L | R); a mono mix keeps a single bar. Stereo is either reported
-  // in the snapshot (mixStereoPairs) or latched from observed L/R
-  // divergence; for a reported pair the sides combine across both buses.
+  // Mix buses (live from UDP packet 0x18). A stereo mix shows two
+  // bars (L | R); a mono mix keeps a single bar. Stereo comes from the
+  // snapshot (mixStereoPairs, ParamData header @90..91); for a reported
+  // pair the sides combine across both buses.
   for (const btn of elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")) {
     const meters = btn.querySelectorAll<HTMLElement>(".ch-meter");
     if (!meters.length) continue;
@@ -1308,7 +1369,6 @@ export function reset(): void {
   populateMonitorSelects();
   state.stereoPairs = [];
   state.mixStereoPairs = [];
-  stereoObservedMixes.clear();
   lastMixNames = []; // fresh session — no stale mix names
   lastGroupNames = []; // fresh session — no stale group names
   buildMixButtons(); // rebuild without stereo bars
@@ -1395,7 +1455,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   e.preventDefault();
 
   const channelBtns = [...elementRefs.chButtons.querySelectorAll<HTMLButtonElement>(".ch-btn")];
-  const mixBtns = [...elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn")];
+  // Mixes plus group buses (groups live in the FX row since v1.19.x, but
+  // cycle together with the mixes as one source family).
+  const mixBtns = [
+    ...elementRefs.mixButtons.querySelectorAll<HTMLButtonElement>(".mix-btn:not(.grp-btn)"),
+    ...elementRefs.fxButtons.querySelectorAll<HTMLButtonElement>(".grp-btn"),
+  ];
 
   // Determine active group: channels or mixes
   let group: HTMLButtonElement[];

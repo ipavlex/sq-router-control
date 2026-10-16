@@ -55,5 +55,11 @@ export function matrixButtonSpecs(
     const name = names[slot] || (pair ? names[pair[1] - MATRIX_BASE_B3] || "" : "");
     specs.push({ b3L: b3, b3R: pair ? pair[1] : null, name });
   }
-  return specs;
+  // Only configured matrices get buttons: a slot is shown when it carries a
+  // console name or is part of a ganged (stereo) pair — unnamed free slots
+  // are unused matrices. Fallback: with no names and no pairs at all (the
+  // blob header has not been decoded yet), keep the full six-slot layout so
+  // the buttons don't disappear before the first snapshot arrives.
+  const configured = specs.filter((s) => s.name !== "" || s.b3R !== null);
+  return configured.length > 0 || pairs.length > 0 ? configured : specs;
 }

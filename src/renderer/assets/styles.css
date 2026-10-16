@@ -1407,10 +1407,14 @@ h2.stereo-diff:hover::after {
   transform: scale(0.96);
 }
 
-/* Group bus buttons — same look as mixes, extra left margin separates the
-   group block from the mixes (same visual break as .src-break in the FX row). */
+/* Group bus buttons — live in the FX row (between the FX returns and the
+   matrices), visually joined into one block like the FX/Mtx buttons: same
+   compact metrics and font size as .fx-btn/.mtx-btn. The gap before the
+   block comes from .src-break on the first button (set in JS). */
 .grp-btn {
-  margin-left: 12px;
+  font-size: 14px;
+  padding: 8px 14px;
+  min-width: 72px;
 }
 
 .mainlr-btn {

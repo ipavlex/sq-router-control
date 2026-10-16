@@ -137,6 +137,7 @@ window.sq.onRouting((snapshot: SnapshotPayload) => {
   monitor.updateFxNames(snapshot.fxNames ?? []);
   monitor.updateMatrixNames(snapshot.matrixNames ?? []);
   monitor.updateGroupNames(snapshot.groupNames ?? []);
+  monitor.updateBusComposition(snapshot.auxCount ?? null, snapshot.groupCount ?? null);
   monitor.updateOutputUsage(snapshot.outputs);
   log.updateStat(snapshot);
   state.currentSceneName = snapshot.currentSceneName ?? null;

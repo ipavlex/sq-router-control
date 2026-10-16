@@ -52,6 +52,12 @@ export interface SnapshotInput {
 export interface SnapshotOutput {
   kind: string;
   sourceLabel: string;
+  /**
+   * Source bus b3 of the patch frame (kind "bus"). For the right half of a
+   * console-linked stereo pair this is the MASTER b3 (the frame addresses the
+   * master with modifier 0x10) — while sourceLabel names the slave channel.
+   */
+  sourceB3?: number;
   dest: number;
   destLabel: string;
   destChannel: number;
@@ -117,6 +123,13 @@ export interface SnapshotPayload {
   matrixNames?: string[];
   /** Group bus names 1-4 (index 0 = Group 1, b3 0x48-0x4b). */
   groupNames?: string[];
+  /**
+   * Bus composition from the ParamData header (@61/@65): aux / group counts
+   * of the 12-slot mix pool. null/undefined = not decoded yet — the Monitor
+   * tab falls back to the full 12 Mix / 4 Grp button layout.
+   */
+  auxCount?: number | null;
+  groupCount?: number | null;
   updates: number;
   routingBlockBytes: number | null;
   /** Name of the console's currently-active scene, if known. */

@@ -41,6 +41,7 @@ import {
   decodeMixStereoPairs,
   decodeMatrixStereoPairs,
   decodeLinkedBuses,
+  decodeBusComposition,
 } from "../stereo-links";
 import {
   decodeMeterMessage,
@@ -644,6 +645,10 @@ export class Connection extends EventEmitter {
     // pair 1 stereo; unlisted slots are mono matrices. Authoritative source —
     // the link-region A-pairs are sticky and NOT used here.
     this.emit("matrixStereoPairs", decodeMatrixStereoPairs(payload));
+
+    // Bus composition from the blob header (@61/@65): aux / group counts of
+    // the 12-slot mix pool. Drives the Monitor tab's visible Mix/Grp buttons.
+    this.emit("busComposition", decodeBusComposition(payload));
 
     // Encoding-A stereo links for non-input buses (matrices, mixes, Main LR),
     // decoded from the same blob region. Used for diagnostics only for now.

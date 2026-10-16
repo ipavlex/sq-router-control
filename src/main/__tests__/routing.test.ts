@@ -139,11 +139,16 @@ describe("RoutingModel.handleDsp — output patch", () => {
     const m = new RoutingModel();
     // Captured from a real SQ-5: linked pair master b3 0x1a → Local Out 1 (L,
     // modifier 0x0f) and Local Out 2 (R, modifier 0x10); both carry the master.
+    // The right half's label names the SLAVE channel (master+1), while
+    // sourceB3 keeps the master for frame reconstruction.
     m.handleDsp(patchFrame(0x1a, 0x0f, 0, OutputPatchDest.Local));
     m.handleDsp(patchFrame(0x1a, 0x10, 1, OutputPatchDest.Local));
     const outputs = m.snapshot().outputs.sort((a, b) => a.destChannel - b.destChannel);
     assert.equal(outputs.length, 2);
-    assert.equal(outputs[0].sourceLabel, outputs[1].sourceLabel);
+    assert.equal(outputs[0].sourceLabel, "Input 27");
+    assert.equal(outputs[1].sourceLabel, "Input 28");
+    assert.equal(outputs[0].sourceB3, 0x1a);
+    assert.equal(outputs[1].sourceB3, 0x1a);
     assert.equal(outputs[0].rightHalf ?? false, false);
     assert.equal(outputs[1].rightHalf, true);
     assert.equal(outputs[1].destChannel, 2);

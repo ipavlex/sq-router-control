@@ -105,6 +105,13 @@ export interface RendererState {
    * pair 1 stereo. Slots outside any pair are mono matrices.
    */
   matrixStereoPairs: number[][];
+  /**
+   * Bus composition from the snapshot (ParamData header @61/@65): aux / group
+   * counts of the 12-slot mix pool. null = unknown — the Monitor tab falls
+   * back to the full 12 Mix / 4 Grp layout.
+   */
+  auxCount: number | null;
+  groupCount: number | null;
   /** Last routing snapshot received from the console (Active Patching data). */
   activeInputs: SnapshotInput[];
   /** Channel state (fader/mute/gain/…) from snapshots, keyed by b3. */

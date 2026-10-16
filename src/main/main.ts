@@ -692,8 +692,11 @@ class SQController {
     const valLo = Math.max(0, (out.destChannel ?? 1) - 1);
     const valHi = out.dest;
     if (out.kind === "bus") {
-      const b3 = labelToB3(out.sourceLabel);
-      if (b3 === null) return null;
+      // Prefer the decoded master b3 (right-half records carry the master in
+      // sourceB3 while sourceLabel names the slave channel); fall back to the
+      // label reverse-lookup for saved records from older versions.
+      const b3 = out.sourceB3 ?? labelToB3(out.sourceLabel);
+      if (b3 === null || b3 === undefined) return null;
       return { ch: b3, modifier: out.rightHalf ? 0x10 : 0x0f, valLo, valHi };
     }
     if (out.kind === "fx") {
@@ -850,6 +853,18 @@ class SQController {
       this.send("sq:log", {
         level: "frame",
         msg: `Matrix pairs ganged (ParamData @93): ${list || "none (6 mono)"}`,
+      });
+    });
+
+    // Bus composition from the ParamData header (@61/@65): aux / group counts
+    // of the 12-slot mix pool — drives the Monitor tab's visible buttons.
+    conn.on("busComposition", (comp: { groups: number; aux: number }) => {
+      this.model.auxCount = comp.aux;
+      this.model.groupCount = comp.groups;
+      dirty = true;
+      this.send("sq:log", {
+        level: "frame",
+        msg: `Bus composition (ParamData @61/@65): ${comp.aux} aux + ${comp.groups} grp`,
       });
     });
 

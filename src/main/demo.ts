@@ -37,6 +37,9 @@ interface DemoVariant {
   mixStereoPairs: number[][];
   /** Ganged matrix pairs as b3 addresses (ParamData header @93 layout). */
   matrixStereoPairs: number[][];
+  /** Bus composition of the 12-slot mix pool (ParamData header @61/@65). */
+  auxCount: number;
+  groupCount: number;
   inputs: { destB3: number; source: number; sourceChannel: number }[];
   outputs: (
     | { kind: "output"; sourceB3: number; dest: number; destChannel0: number }
@@ -62,27 +65,29 @@ const DEMO_VARIANTS: DemoVariant[] = [
       44: "Sp 7", 45: "Sp 8", 46: "Sp 9", 47: "Sp 10",
       // FX returns 1-4 (b3 0x40-0x43)
       0x40: "VoxRvb", 0x41: "Slap", 0x42: "Plate", 0x43: "DrumVb",
-      // Mix buses 1-12 (b3 0x58-0x63)
+      // Mix buses: 8 aux (b3 0x58-0x5f = Mix 1-8). Mix 9-12 are the group
+      // buses (b3 0x48-0x4b) — named in the group blocks below, so the mix
+      // pool stays aux + grp ≤ 12 (ParamData header @61/@65, SQ-PROTOCOL §8.5).
       0x58: "IEM1 L", 0x59: "IEM1 R", // Mix 1-2 stereo
       0x5a: "Drums", 0x5b: "Vox M", 0x5c: "Gtr M", 0x5d: "Key M",
       0x5e: "Wedge", 0x5f: "Foldb",
-      0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
-      0x62: "Spill", 0x63: "Spare",
       // Matrix slots 1-6 (b3 0x73-0x78; cross-paired: L = 0x73-0x75,
       // R = 0x76-0x78). Pair 1 and pair 3 ganged, slots 0x74/0x75 split
       // to mono — exercises the mixed button layout (MON-B5).
       0x73: "Subs", 0x76: "Subs", // Matrix pair 1 stereo
       0x74: "Lobby", 0x75: "Fill", // split to mono
       0x77: "Feed", 0x78: "Feed", // Matrix pair 3 stereo
-      // Group buses 1-4 (b3 0x48-0x4b)
+      // Group buses 1-4 (b3 0x48-0x4b) — the Mix 9-12 slots of the pool.
       0x48: "VoxG", 0x49: "DrumG", 0x4a: "KeyG",
     },
     stereoPairs: [
       [2, 3], [6, 7], [8, 9], [14, 15], [16, 17],
       [28, 29], [30, 31], [32, 33], [36, 37],
     ],
-    mixStereoPairs: [[0, 1], [8, 9]],
+    mixStereoPairs: [[0, 1]],
     matrixStereoPairs: [[0x73, 0x76], [0x77, 0x78]],
+    auxCount: 8,
+    groupCount: 4,
     inputs: [
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: i, source: Src.Local, sourceChannel: i })),
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: 16 + i, source: Src.SLink, sourceChannel: i })),
@@ -120,18 +125,20 @@ const DEMO_VARIANTS: DemoVariant[] = [
       42: "Sfx 5", 43: "Sfx 6", 44: "Sfx 7", 45: "Sfx 8", 46: "Sfx 9", 47: "Sfx 10",
       // FX returns 1-4 (b3 0x40-0x43)
       0x40: "Hall", 0x41: "TapeDl", 0x42: "Chorus", 0x43: "Spare",
-      // Mix buses 1-12 (b3 0x58-0x63)
+      // Mix buses: 10 aux (b3 0x58-0x61 = Mix 1-10). Mix 11-12 are the group
+      // buses (b3 0x48-0x4b) — named in the group blocks below, so the mix
+      // pool stays aux + grp ≤ 12 (ParamData header @61/@65, SQ-PROTOCOL §8.5).
       0x58: "Band", 0x59: "Vocal",
       0x5a: "IEM1 L", 0x5b: "IEM1 R", // Mix 3-4 stereo
       0x5c: "Wedge", 0x5d: "Drums",
       0x5e: "IEM2 L", 0x5f: "IEM2 R", // Mix 7-8 stereo
-      0x60: "IEM 3", 0x61: "IEM 4", 0x62: "Spare", 0x63: "Foldb",
+      0x60: "IEM 3", 0x61: "IEM 4",
       // Matrix slots 1-6 (b3 0x73-0x78; cross-paired: L = 0x73-0x75,
       // R = 0x76-0x78) — all three pairs ganged (3 stereo buttons).
       0x73: "Mtx A", 0x76: "Mtx A",
       0x74: "Mtx B", 0x77: "Mtx B",
       0x75: "Mtx C", 0x78: "Mtx C",
-      // Group buses 1-4 (b3 0x48-0x4b)
+      // Group buses 1-2 (b3 0x48-0x49) — the Mix 11-12 slots of the pool.
       0x48: "Band", 0x49: "Vox",
     },
     stereoPairs: [
@@ -139,6 +146,8 @@ const DEMO_VARIANTS: DemoVariant[] = [
     ],
     mixStereoPairs: [[2, 3], [6, 7]],
     matrixStereoPairs: [[0x73, 0x76], [0x74, 0x77], [0x75, 0x78]],
+    auxCount: 10,
+    groupCount: 2,
     inputs: [
       ...Array.from({ length: 8 }, (_, i) => ({ destB3: i, source: Src.Local, sourceChannel: i })),
       ...Array.from({ length: 8 }, (_, i) => ({ destB3: 8 + i, source: Src.SLink, sourceChannel: i })),
@@ -175,22 +184,25 @@ const DEMO_VARIANTS: DemoVariant[] = [
       44: "Cue 11", 45: "Cue 12", 46: "Cue 13", 47: "Cue 14",
       // FX returns 1-4 (b3 0x40-0x43)
       0x40: "Plate", 0x41: "Echo", 0x42: "Flange", 0x43: "Spare",
-      // Mix buses 1-12 (b3 0x58-0x63)
+      // Mix buses: 10 aux (b3 0x58-0x61 = Mix 1-10). Mix 11-12 are the group
+      // buses (b3 0x48-0x4b) — named in the group blocks below, so the mix
+      // pool stays aux + grp ≤ 12 (ParamData header @61/@65, SQ-PROTOCOL §8.5).
       0x58: "Drums", 0x59: "Vox 1", 0x5a: "Vox 2", 0x5b: "Gtr M",
       0x5c: "Bass", 0x5d: "Keys", 0x5e: "Horns", 0x5f: "IEM 1",
-      0x60: "IEM 2", 0x61: "Wedge",
-      0x62: "Rec L", 0x63: "Rec R", // Mix 11-12 stereo
+      0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
       // Matrix slots 1-6 (b3 0x73-0x78) — no pair ganged: six mono matrices,
       // three of them named like the reference SQ-5 dump (MON-B5).
       0x73: "MainPA", 0x74: "FrntFl", 0x75: "YouTMx",
-      // Group buses 1-4 (b3 0x48-0x4b)
-      0x48: "Rhythm", 0x49: "Horns",
+      // Group buses 1-2 (b3 0x48-0x49) — the Mix 11-12 slots of the pool.
+      0x48: "Rhythm", 0x49: "BrassG",
     },
     stereoPairs: [
       [2, 3], [16, 17], [28, 29], [30, 31], [32, 33],
     ],
-    mixStereoPairs: [[10, 11]],
+    mixStereoPairs: [[8, 9]],
     matrixStereoPairs: [],
+    auxCount: 10,
+    groupCount: 2,
     inputs: [
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: i, source: Src.SLink, sourceChannel: i })),
       ...Array.from({ length: 16 }, (_, i) => ({ destB3: 16 + i, source: Src.Local, sourceChannel: i })),
@@ -427,15 +439,20 @@ export class DemoSession {
       46: "Sp 9", 47: "Sp 10",
       // FX returns 1-4 (b3 0x40-0x43)
       0x40: "VoxRvb", 0x41: "Slap", 0x42: "Plate", 0x43: "DrumVb",
-      // Mix buses 1-12 (b3 0x58-0x63)
+      // Mix buses: 8 aux (b3 0x58-0x5f = Mix 1-8). Mix 9-12 are the group
+      // buses (b3 0x48-0x4b) — named in the group blocks below, so the mix
+      // pool stays aux + grp ≤ 12 (ParamData header @61/@65, SQ-PROTOCOL §8.5).
       0x58: "IEM1 L", 0x59: "IEM1 R", // Mix 1-2 stereo
       0x5a: "Drums", 0x5b: "Vox M", 0x5c: "Gtr M", 0x5d: "Key M",
       0x5e: "Wedge", 0x5f: "Foldb",
-      0x60: "IEM2 L", 0x61: "IEM2 R", // Mix 9-10 stereo
-      0x62: "Spill", 0x63: "Spare",
-      // Matrix slots 1-3 (b3 0x73-0x75), named consecutively like the reference
-      // SQ-5 dump — three mono matrices share the three Mtx buttons (MON-B6).
-      0x73: "MainPA", 0x74: "FrntFl", 0x75: "YouTMx",
+      // Matrix slots (b3 0x73-0x78; cross-paired: L = 0x73-0x75,
+      // R = 0x76-0x78). Pair 1 ganged (stereo), slots 0x74/0x75 mono and
+      // named consecutively like the reference SQ-5 dump (MON-B5/MON-B6) —
+      // exercises both stereo and mono matrix buttons right from the burst.
+      0x73: "MainPA", 0x76: "MainPA", // Matrix pair 1 stereo
+      0x74: "FrntFl", 0x75: "YouTMx",
+      // Group buses 1-4 (b3 0x48-0x4b) — the Mix 9-12 slots of the pool.
+      0x48: "VoxG", 0x49: "DrumG", 0x4a: "KeyG",
     };
 
     // Each phase mutates the model, then a fresh snapshot is flushed to the UI.
@@ -458,8 +475,14 @@ export class DemoSession {
           [2, 3], [6, 7], [8, 9], [14, 15], [16, 17],
           [28, 29], [30, 31], [32, 33], [36, 37],
         ];
-        this.host.model.mixStereoPairs = [[0, 1], [8, 9]];
-        this.host.model.matrixStereoPairs = []; // six mono matrices (MON-B5)
+        this.host.model.mixStereoPairs = [[0, 1]];
+        // Matrix pair 1 ganged (stereo), slots 0x74/0x75 mono — exercises
+        // both stereo and mono matrix buttons (MON-B5).
+        this.host.model.matrixStereoPairs = [[0x73, 0x76]];
+        // Bus composition: 8 aux + 4 grp of the 12-slot mix pool
+        // (ParamData header @61/@65 equivalent).
+        this.host.model.auxCount = 8;
+        this.host.model.groupCount = 4;
       },
       // Phase 4 — output patches.
       () => {
@@ -638,6 +661,9 @@ export class DemoSession {
     this.host.model.stereoPairs = config.stereoPairs;
     this.host.model.mixStereoPairs = config.mixStereoPairs;
     this.host.model.matrixStereoPairs = config.matrixStereoPairs;
+    // Bus composition (ParamData header @61/@65 equivalent).
+    this.host.model.auxCount = config.auxCount;
+    this.host.model.groupCount = config.groupCount;
 
     // Input patches.
     for (const p of config.inputs) {
