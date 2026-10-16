@@ -165,6 +165,24 @@ describe("decodeMeterMessage — id=0x18 (buses)", () => {
     assert.equal(m.mixesR?.[0], null);
     assert.equal(m.mixes?.[0], null);
   });
+
+  it("decodes FX send 1-4 (buses 36-39)", () => {
+    const values = busBody();
+    // FX send 1 (bus 36): L taps -3/-5, R tap floor → -3, no clip.
+    setBus(values, 36, ZERO_DB - 768, ZERO_DB - 1280, FLOOR, FLOOR);
+    // FX send 2 (bus 37): clip on the L tap (+1 dB).
+    setBus(values, 37, ZERO_DB + 256, FLOOR, FLOOR, FLOOR);
+    // FX send 3 (bus 38) and 4 (bus 39): floor.
+    const m = decodeMeterMessage(meterMsg(0x18, values));
+    assert.ok(m);
+    assert.equal(m.fxSends?.length, 4);
+    assert.equal(m.fxSends?.[0], -3);
+    assert.equal(m.fxSendClip?.[0], false);
+    assert.equal(m.fxSends?.[1], 1);
+    assert.equal(m.fxSendClip?.[1], true);
+    assert.equal(m.fxSends?.[2], null);
+    assert.equal(m.fxSends?.[3], null);
+  });
 });
 
 describe("decodeMeterMessage — merging and validation", () => {

@@ -13,6 +13,7 @@
 | [`CONNECT-SCREEN.md`](CONNECT-SCREEN.md) | Стартовый экран подключения, рукопожатие, ошибки |
 | [`ROUTING-TAB.md`](ROUTING-TAB.md) | Вкладка «Роутинг»: Active/Input Patching, A/B, Upload/Download, сохранения |
 | [`MONITOR-TAB.md`](MONITOR-TAB.md) | Вкладка «Монитор»: L/R выходы, PAFL, safes, метры |
+| [`METERS-TAB.md`](METERS-TAB.md) | Вкладка «Метры»: обзорная метро-сетка (Inputs / Mix / FX / USB) |
 | [`LOG-TAB.md`](LOG-TAB.md) | Вкладка «Журнал»: уровни, метки, источники записей |
 | [`SQ-PROTOCOL.md`](SQ-PROTOCOL.md) | Бинарный протокол SQ: кадры, регистры, ParamData, метры |
 | [`SQ-DUMP.md`](SQ-DUMP.md) | CLI-тула `sq-dump`: контролируемые дампы ParamData и diff |
@@ -31,7 +32,8 @@
   Renderer не имеет доступа к Node (`nodeIntegration: false`,
   `contextIsolation: true`).
 - **renderer** (`src/renderer/`) — UI на чистом TypeScript без фреймворков:
-  экран подключения, дашборд и три вкладки. Сеть не трогает — только `window.sq`.
+  экран подключения, дашборд и вкладки (роутинг, монитор, метры, журнал).
+  Сеть не трогает — только `window.sq`.
 
 ### Поток данных
 

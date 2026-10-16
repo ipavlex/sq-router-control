@@ -215,6 +215,13 @@ export interface MetersPayload {
   mainLRR?: number | null;
   mainLRClipL?: boolean;
   mainLRClipR?: boolean;
+  /**
+   * dBFS levels for FX send buses 1-4 (0x18 buses 36-39, SQ-PROTOCOL §8.4),
+   * louder side of each bus (null = no signal).
+   */
+  fxSends?: (number | null)[];
+  /** Clip flags for FX send buses 1-4. */
+  fxSendClip?: boolean[];
 }
 
 /** Result of a "save file to disk" request driven by the main process. */

@@ -1940,3 +1940,215 @@ h2.stereo-diff:hover::after {
   border-color: var(--red);
   background: rgba(240, 97, 109, 0.1);
 }
+
+/* ── Meters tab ────────────────────────────────────────────────────── */
+#view-meters {
+  padding: 12px 14px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+/* Sub-tab block under the topbar. */
+.meters-subtabs {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.meters-subtab {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.meters-subtab:hover {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+.meters-subtab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Cell grid: wrap as many cells as fit, scroll for the rest. */
+.meters-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+/* One meter cell: name, bar(s), flag row. */
+.m-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 8px 8px 6px;
+  min-width: 0;
+}
+
+.m-cell.m-scaffold {
+  opacity: 0.72;
+}
+
+.m-cell-name {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  /* Console names are ≤ 6 chars — always show them in full: wrap instead
+     of clipping with an ellipsis. */
+  white-space: normal;
+  line-height: 1.2;
+}
+
+.m-cell-body {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 110px;
+}
+
+/* Bar group: strips sit adjacent (L | R), centered left of the flags. */
+.m-bars {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  align-items: stretch;
+}
+
+/* Scoped variant of the shared .ch-meter: static (not button-absolute),
+   fixed narrow channel-strip width for every sub-tab. */
+.m-cell .ch-meter {
+  position: relative;
+  left: auto;
+  top: auto;
+  bottom: auto;
+  flex: 0 0 8px;
+  min-width: 8px;
+  max-width: 8px;
+}
+
+/* G / C / M flag row. */
+.m-cell-flags {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.m-flag {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev2);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  user-select: none;
+}
+
+.m-flag.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.m-flag.m-mute.on {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+/* Reserved activity state for future gate/comp dynamics (group B). */
+.m-flag.act {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #fff;
+}
+
+.m-flag.na {
+  opacity: 0.35;
+}
+
+/* Section header inside the grid (Aux / Group / Mtx / Master). */
+.m-section {
+  grid-column: 1 / -1;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 6px 2px 0;
+}
+
+/* Last Mix row: Master on the left, matrices a small step to the right. */
+.m-lastrow {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.m-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.m-group .m-section {
+  grid-column: auto;
+  padding: 0 2px 6px;
+}
+
+.m-group-cells {
+  display: flex;
+  gap: 8px;
+}
+
+.m-group-cells .m-cell {
+  flex: 0 0 auto;
+  width: 72px;
+}
+
+/* USB (and other dataless) sub-tabs. */
+.m-empty {
+  grid-column: 1 / -1;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+  background: var(--bg-elev);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+/* Channel number line above the name (input cells). */
+.m-cell-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-dim);
+}

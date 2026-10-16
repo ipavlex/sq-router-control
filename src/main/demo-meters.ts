@@ -121,6 +121,8 @@ export class DemoMetersSim {
   private mixPairs: number[][] = [];
   /** Main LR state. */
   private mainLR: MixState | null = null;
+  /** FX send bus states (index 0 = FX send 1). */
+  private fxSends: MixState[] = [];
   /** Signature of the last seen active-channel set. */
   private activeSig = "";
 
@@ -183,6 +185,17 @@ export class DemoMetersSim {
       clipHold: 0,
       stereo: true,
     };
+    // FX send buses: a few contributors each, like post-fader effect taps.
+    this.fxSends = [];
+    for (let i = 0; i < 4; i++) {
+      this.fxSends.push({
+        contributors: pick(1, 4),
+        trim: rand(-8, -2),
+        level: null,
+        clipHold: 0,
+        stereo: false,
+      });
+    }
   }
 
   /** Advance the simulation by one tick and produce a meters payload. */
@@ -231,6 +244,15 @@ export class DemoMetersSim {
     }
     const lr = this.mainLR ? this.tickMix(this.mainLR) : { db: null, clip: false };
 
+    // FX send buses 1-4 (packet 0x18, buses 36-39 on a real console).
+    const fxSends: (number | null)[] = [];
+    const fxSendClip: boolean[] = [];
+    for (const fx of this.fxSends) {
+      const r = this.tickMix(fx);
+      fxSends.push(r.db);
+      fxSendClip.push(r.clip);
+    }
+
     return {
       inputs,
       clip,
@@ -246,6 +268,8 @@ export class DemoMetersSim {
       mainLRR: lr.db == null ? null : lr.db + rand(-1.5, 1.5),
       mainLRClipL: lr.clip,
       mainLRClipR: lr.clip,
+      fxSends,
+      fxSendClip,
     };
   }
 

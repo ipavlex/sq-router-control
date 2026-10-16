@@ -81,6 +81,7 @@ module.exports = [
           { name: "routing", file: path.resolve(__dirname, "src/renderer/tabs/routing/view.html") },
           { name: "log", file: path.resolve(__dirname, "src/renderer/tabs/log/view.html") },
           { name: "monitor", file: path.resolve(__dirname, "src/renderer/tabs/monitor/view.html") },
+          { name: "meters", file: path.resolve(__dirname, "src/renderer/tabs/meters/view.html") },
           { name: "routing-modals", file: path.resolve(__dirname, "src/renderer/tabs/routing/modals.html") },
         ],
         output: "index.html",

@@ -32,13 +32,17 @@ export interface ElementRefs {
   viewRouting: HTMLElement;
   viewLog: HTMLElement;
   viewMonitor: HTMLElement;
+  viewMeters: HTMLElement;
   routingBtn: HTMLButtonElement;
   monitorBtn: HTMLButtonElement;
+  metersBtn: HTMLButtonElement;
   monLDest: HTMLSelectElement;
   monRDest: HTMLSelectElement;
   mixButtons: HTMLElement;
   chButtons: HTMLElement;
   fxButtons: HTMLElement;
+  metersSubtabs: HTMLElement;
+  metersGrid: HTMLElement;
   mainlrBtn: HTMLButtonElement;
   paflBtn: HTMLButtonElement;
   monEnable: HTMLInputElement;

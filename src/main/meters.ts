@@ -59,6 +59,9 @@ const BUS_LR_OFFSETS: [number, number][] = [
 const BUS_MAIN_LR = 23;
 const BUS_MIX_FIRST = 24;
 const MIX_BUS_COUNT = 12;
+/** Buses 36-39 of the id=0x18 packet = FX send 1-4 (SQ-PROTOCOL §8.4). */
+const BUS_FX_FIRST = 36;
+const FX_SEND_COUNT = 4;
 
 /** Convert a raw 16-bit meter value to dBFS, or null when it's the floor. */
 export function rawToDb(raw: number): number | null {
@@ -208,6 +211,9 @@ let busMeters: {
   mainLRR: number | null;
   mainLRClipL: boolean;
   mainLRClipR: boolean;
+  /** FX send 1-4 levels (louder side, null = floor) and clip flags. */
+  fxSends: (number | null)[];
+  fxSendClip: boolean[];
 } | null = null;
 
 interface BusStereo {
@@ -301,6 +307,13 @@ export function decodeMeterMessage(msg: Buffer): MetersPayload | null {
       mixClipR.push(s.clipR);
     }
     const lr = decodeBusStereo(body, BUS_MAIN_LR);
+    const fxSends: (number | null)[] = [];
+    const fxSendClip: boolean[] = [];
+    for (let k = 0; k < FX_SEND_COUNT; k++) {
+      const s = decodeBusStereo(body, BUS_FX_FIRST + k);
+      fxSends.push(s.l == null ? s.r : s.r == null ? s.l : Math.max(s.l, s.r));
+      fxSendClip.push(s.clipL || s.clipR);
+    }
     busMeters = {
       mixes,
       mixClip,
@@ -314,6 +327,8 @@ export function decodeMeterMessage(msg: Buffer): MetersPayload | null {
       mainLRR: lr.r,
       mainLRClipL: lr.clipL,
       mainLRClipR: lr.clipR,
+      fxSends,
+      fxSendClip,
     };
     return mergeMeters();
   }
@@ -341,6 +356,8 @@ function mergeMeters(): MetersPayload {
     merged.mainLRR = busMeters.mainLRR;
     merged.mainLRClipL = busMeters.mainLRClipL;
     merged.mainLRClipR = busMeters.mainLRClipR;
+    merged.fxSends = busMeters.fxSends;
+    merged.fxSendClip = busMeters.fxSendClip;
   }
   return merged;
 }

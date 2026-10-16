@@ -389,6 +389,10 @@ export class DemoSession {
       // HPF (100 Hz) on every third channel.
       dsp(b3, 0x0e, 0x0c, 0x00, b3 % 3 === 1 ? 1 : 0);
       dsp(b3, 0x0e, 0x0d, 0x00, Math.round(-9206 + 15308 * Math.log10(100)));
+      // Gate on every 5th channel, compressor on every 3rd (mixes the
+      // Meters-tab G/C flags across on/off states).
+      dsp(b3, 0x0f, 0x0c, 0x00, b3 % 5 === 2 ? 1 : 0);
+      dsp(b3, 0x13, 0x0c, 0x00, b3 % 3 === 0 ? 1 : 0);
       // Bus 1 send at half level on every 4th channel.
       dsp(b3, 0x07, 0x0e, 0x10, b3 % 4 === 0 ? 35328 >> 1 : 0);
     }

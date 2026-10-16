@@ -7,6 +7,7 @@
 import { elementRefs, state, setLoading, setMessage, showScreen, showView, updateSceneHint, todayStr } from "../core/utils";
 import * as routing from "../tabs/routing";
 import * as monitor from "../tabs/monitor";
+import * as meters from "../tabs/meters";
 import * as log from "../tabs/log";
 import { buildReaperTracks, buildReaperTrackTemplate } from "../../shared/reaper-template";
 import type { LogPayload, ModelSpec, ReconnectInfo, SnapshotPayload, StatusPayload, VersionInfo } from "../../shared/ipc";
@@ -29,6 +30,7 @@ export function enterDashboard(
 
   routing.reset();
   monitor.reset();
+  meters.reset();
   log.clear();
 
   updateSceneHint();
@@ -103,6 +105,7 @@ window.sq.onStatus((p: StatusPayload) => {
       // The console re-floods its state; clear stale meters until it arrives.
       routing.clearMeters();
       monitor.clearMeters();
+      meters.clearMeters();
       setMessage("", "");
     }
     return;
@@ -110,6 +113,7 @@ window.sq.onStatus((p: StatusPayload) => {
 
   routing.clearMeters();
   monitor.clearMeters();
+  meters.clearMeters();
 
   if (p.reconnect?.active) {
     // Unexpected drop with auto-reconnect running: stay on the dashboard and
@@ -139,6 +143,7 @@ window.sq.onRouting((snapshot: SnapshotPayload) => {
   monitor.updateGroupNames(snapshot.groupNames ?? []);
   monitor.updateBusComposition(snapshot.auxCount ?? null, snapshot.groupCount ?? null);
   monitor.updateOutputUsage(snapshot.outputs);
+  meters.onRoutingSnapshot(snapshot);
   log.updateStat(snapshot);
   state.currentSceneName = snapshot.currentSceneName ?? null;
   updateSceneHint();
@@ -151,13 +156,14 @@ window.sq.onInitialState(() => {
 
 window.sq.onLog((p: LogPayload) => log.pushLog(p.level, p.msg, p.raw));
 
-// Live input meters (UDP, ~25-50 Hz) — the routing tab coalesces per frame.
+// Live input meters (UDP, ~25-50 Hz) — coalesced per frame by each tab.
 window.sq.onMeters((p) => {
   routing.updateMeters(p);
   monitor.updateMeters(p);
+  meters.updateMeters(p);
 });
 
-// ── view switching (routing / log / monitor) ────────────────────────
+// ── view switching (routing / log / monitor / meters) ────────────────
 
 elementRefs.logBtn.addEventListener("click", () => {
   showView("log");
@@ -165,6 +171,7 @@ elementRefs.logBtn.addEventListener("click", () => {
 });
 elementRefs.routingBtn.addEventListener("click", () => showView("routing"));
 elementRefs.monitorBtn.addEventListener("click", () => showView("monitor"));
+elementRefs.metersBtn.addEventListener("click", () => showView("meters"));
 
 // ── REAPER track-template export (topbar) ───────────────────────────
 

@@ -29,13 +29,17 @@ export const elementRefs: ElementRefs = {
   viewRouting: $("#view-routing"),
   viewLog: $("#view-log"),
   viewMonitor: $("#view-monitor"),
+  viewMeters: $("#view-meters"),
   routingBtn: $("#routing-btn"),
   monitorBtn: $("#monitor-btn"),
+  metersBtn: $("#meters-btn"),
   monLDest: $("#mon-l-dest"),
   monRDest: $("#mon-r-dest"),
   mixButtons: $("#mix-buttons"),
   chButtons: $("#ch-buttons"),
   fxButtons: $("#fx-buttons"),
+  metersSubtabs: $("#meters-subtabs"),
+  metersGrid: $("#meters-grid"),
   mainlrBtn: $("#mainlr-btn"),
   paflBtn: $("#pafl-btn"),
   monEnable: $("#mon-enable"),
@@ -221,14 +225,18 @@ export function updateSceneHint(): void {
   el.title = "Текущая сцена станет известна после рекола сцены на консоли";
 }
 
-/** Switch between the routing / log / monitor views. */
-export function showView(which: "routing" | "log" | "monitor"): void {
+/** Switch between the routing / log / monitor / meters views. */
+export function showView(
+  which: "routing" | "log" | "monitor" | "meters"
+): void {
   elementRefs.viewRouting.hidden = which !== "routing";
   elementRefs.viewLog.hidden = which !== "log";
   elementRefs.viewMonitor.hidden = which !== "monitor";
+  elementRefs.viewMeters.hidden = which !== "meters";
   // Highlight active tab
   elementRefs.routingBtn.classList.toggle("active", which === "routing");
   elementRefs.monitorBtn.classList.toggle("active", which === "monitor");
+  elementRefs.metersBtn.classList.toggle("active", which === "meters");
   elementRefs.logBtn.classList.toggle("active", which === "log");
 }
 
