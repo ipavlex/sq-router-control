@@ -3,7 +3,7 @@
  * human-readable decoding of every changed offset.
  *
  * Built for the controlled-dump verification workflow
- * (docs/VERIFY-STEREO-MODES.md): capture a baseline, change exactly ONE
+ * (docs/SQ-DUMP.md): capture a baseline, change exactly ONE
  * setting on the console, capture again — the diff then points straight at
  * the field that encodes the setting (e.g. the mix mono/stereo byte +331 or
  * a link-table entry for the matrix stereo mode).

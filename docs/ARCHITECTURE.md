@@ -15,7 +15,7 @@
 | [`MONITOR-TAB.md`](MONITOR-TAB.md) | Вкладка «Монитор»: L/R выходы, PAFL, safes, метры |
 | [`LOG-TAB.md`](LOG-TAB.md) | Вкладка «Журнал»: уровни, метки, источники записей |
 | [`SQ-PROTOCOL.md`](SQ-PROTOCOL.md) | Бинарный протокол SQ: кадры, регистры, ParamData, метры |
-| [`VERIFY-STEREO-MODES.md`](VERIFY-STEREO-MODES.md) | Как подтвердить режим моно/стерео миксов и матриц (дамп + diff) |
+| [`SQ-DUMP.md`](SQ-DUMP.md) | CLI-тула `sq-dump`: контролируемые дампы ParamData и diff |
 | [`../README.md`](../README.md) | Краткий обзор возможностей и запуска |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | История изменений |
 

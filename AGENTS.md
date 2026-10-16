@@ -22,7 +22,7 @@ Electron-приложение для мониторинга и управлен�
 | `npm run watch` | webpack в режиме watch (dev) |
 | `npm run typecheck` | `tsc --noEmit` — **единственная** проверка типов |
 | `npm test` | Юнит-тесты чистых декодеров (`node --test` + `tsx`, без пульта) |
-| `npm run sq-dump -- capture <host> [--label N]` / `diff A B` / `info F` | CLI-тула дампов ParamData для проверки без приложения (см. `docs/VERIFY-STEREO-MODES.md`) |
+| `npm run sq-dump -- capture <host> [--label N]` / `diff A B` / `info F` | CLI-тула дампов ParamData для проверки без приложения (см. `docs/SQ-DUMP.md`) |
 | `npm start` | `build` + `electron .` |
 | `npm run dev` | `build:dev` + `electron . --enable-logging` |
 | `npm run pack` / `dist` | Сборка в `release/` (без установщика / с установщиками) |

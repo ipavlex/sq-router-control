@@ -113,7 +113,7 @@ export function decodeStereoPairs(payload: Buffer): number[][] {
 // ── Blob header: bus composition and stereo bitmaps ─────────────────────────
 //
 // Verified on a real SQ-5 (fw 1.6) across six controlled dumps on 2026-10-15
-// (pd-dumps/: connect-test, baseA, busB…busJ; see VERIFY-STEREO-MODES.md):
+// (see docs/SQ-PROTOCOL.md §8.5; dump tool — docs/SQ-DUMP.md):
 //
 //   @61      = number of GROUP buses of the 12 mix buses (0x02 → 0x07 on a
 //              Bus Config change 10 aux + 2 grp → 5 aux + 7 grp);

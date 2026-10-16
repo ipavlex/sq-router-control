@@ -2,7 +2,7 @@
 /**
  * sq-dump — standalone console dump CLI (no Electron).
  *
- * Verification workflow for docs/VERIFY-STEREO-MODES.md:
+ * Verification workflow (see docs/SQ-DUMP.md):
  *
  *   1. npx tsx tools/sq-dump.ts capture 192.168.1.30 --label baseline
  *   2. change exactly ONE setting on the console (e.g. break Matrix 3 to mono)
