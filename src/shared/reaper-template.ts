@@ -65,6 +65,12 @@ export interface ReaperTrack {
   output: number | null;
   /** True when `output` is a stereo pair start (only for channels: 2). */
   outputStereo: boolean;
+  /**
+   * Console inputs feeding this track (1-based "Input N" sources only);
+   * empty for mixes/FX/matrices recorded to USB. Used by the virtual
+   * soundcheck patch builder (buildUsbSoundcheckPatch).
+   */
+  sourceInputs?: number[];
 }
 
 type SourceKind = "input" | "mix" | "fx" | "matrix" | "other";
@@ -196,6 +202,8 @@ export function buildReaperTracks(snapshot: SnapshotPayload): ReaperTrack[] {
         channels: 2,
         output: null,
         outputStereo: true,
+        sourceInputs:
+          a.source.kind === "input" ? [a.source.index, b.source.index] : [],
       });
       i++; // consume the right side
     } else {
@@ -205,6 +213,7 @@ export function buildReaperTracks(snapshot: SnapshotPayload): ReaperTrack[] {
         channels: 1,
         output: null,
         outputStereo: false,
+        sourceInputs: a.source.kind === "input" ? [a.source.index] : [],
       });
     }
   }
@@ -318,6 +327,36 @@ export function buildReaperTracks(snapshot: SnapshotPayload): ReaperTrack[] {
   }
 
   return tracks;
+}
+
+/** One console input re-sourced from a USB channel for the virtual soundcheck. */
+export interface UsbSoundcheckPatch {
+  /** 0-based console input channel (the input-patch b3 address). */
+  destB3: number;
+  /** 0-based USB source channel the input is patched from. */
+  usbChannel: number;
+}
+
+/**
+ * Derive the virtual-soundcheck input patch from the console's USB output
+ * routing — the same data, and crucially the same hardware-output
+ * allocation, as the REAPER track template. Each input-sourced track patches
+ * its console input(s) from the track's allocated HWOUT channels, so REAPER
+ * playback lands exactly where the template monitors — including misaligned
+ * stereo pairs relocated to a free odd-even pair (e.g. a pair recorded on
+ * USB 2-3 but monitored on 3-4 patches the console inputs from USB 3-4).
+ * Tracks without an allocated output (no free pair) and non-input sources
+ * (mixes, FX, matrices — no console input to re-source) are skipped.
+ */
+export function buildUsbSoundcheckPatch(snapshot: SnapshotPayload): UsbSoundcheckPatch[] {
+  const patches: UsbSoundcheckPatch[] = [];
+  for (const t of buildReaperTracks(snapshot)) {
+    if (t.output === null || !t.sourceInputs?.length) continue;
+    t.sourceInputs.forEach((input, i) => {
+      patches.push({ destB3: input - 1, usbChannel: t.output! + i });
+    });
+  }
+  return patches;
 }
 
 function escapeRppString(s: string): string {

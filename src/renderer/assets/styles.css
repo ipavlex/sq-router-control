@@ -636,6 +636,20 @@ body {
   border-color: var(--green);
 }
 
+/* USB virtual-soundcheck toggle (amber identity), sits after the B button. */
+.btn.usb-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  border-color: rgba(245, 176, 66, 0.45);
+}
+.btn.usb-btn.active {
+  color: #fff;
+  background: rgba(245, 176, 66, 0.18);
+  border-color: var(--amber);
+}
+
 /* Colored list letter in panel titles ("Input Patching · A"). */
 .list-letter {
   font-weight: 700;

@@ -7,6 +7,7 @@ import { elementRefs, state, escapeHtml, flashTitle, todayStr } from "../../core
 import { METER_MIN_DB, dbToPercent, meterClassName, meterDbText } from "../../core/meters";
 import { buildChannelButtons, buildMixButtons } from "../monitor";
 import type { SnapshotInput, SnapshotPayload, MetersPayload } from "../../../shared/ipc";
+import { buildUsbSoundcheckPatch } from "../../../shared/reaper-template";
 import type { EditRow, PatchInput, MergedInput, SavedSet, SavedRoutingEntry } from "./types";
 
 // ── stereo merge helpers ─────────────────────────────────────────────
@@ -816,6 +817,124 @@ async function sendPatchesToConsole(
   }
 }
 
+// ── USB virtual soundcheck ───────────────────────────────────────────
+
+/**
+ * USB virtual-soundcheck toggle. Engaging it captures the console's current
+ * routing into list B, pre-fills list A with a USB patch (input channels are
+ * re-sourced 1:1 from the USB B-card, as laid out by the Reaper template) and
+ * uploads it. Releasing the button sends the captured routing back, so every
+ * input returns to its original source.
+ */
+let usbSoundcheckActive = false;
+/** Console routing captured on engage — restored verbatim on release. */
+let usbSavedSet: SavedSet | null = null;
+
+/**
+ * USB patch map for the virtual soundcheck, derived from the console's USB
+ * output routing via the Reaper track template's own output allocation
+ * (buildUsbSoundcheckPatch): each input-sourced track patches its console
+ * input(s) from the track's allocated HWOUT channels — so playback follows
+ * the template even when a misaligned stereo pair was relocated to a free
+ * pair (recorded on USB 2-3, monitored on 3-4 → inputs patched from 3-4).
+ * Returns destB3 → 0-based USB source channel.
+ */
+function usbPatchMap(): Map<number, number> {
+  const map = new Map<number, number>();
+  const snapshot: SnapshotPayload = {
+    inputs: state.activeInputs,
+    outputs: state.activeOutputs,
+    stereoPairs: state.stereoPairs,
+    updates: 0,
+    routingBlockBytes: null,
+  };
+  for (const p of buildUsbSoundcheckPatch(snapshot)) map.set(p.destB3, p.usbChannel);
+  return map;
+}
+
+/**
+ * Build the USB patch preset from the console's live routing: inputs present
+ * in the USB output map are re-sourced from their USB channel; all other
+ * inputs keep their current source.
+ */
+function buildUsbSet(): SavedSet {
+  const usb = usbPatchMap();
+  return {
+    inputs: state.activeInputs.map((p) => {
+      const usbCh = usb.get(p.destB3);
+      return {
+        destB3: p.destB3,
+        destLabel: p.destLabel,
+        name: p.name,
+        source: usbCh !== undefined ? 0x03 : p.source,
+        sourceChannel: usbCh !== undefined ? usbCh : p.sourceChannel,
+        checked: false,
+      };
+    }),
+    stereoPairs: state.stereoPairs.map((p) => [p[0], p[1]]),
+  };
+}
+
+async function toggleUsbSoundcheck(): Promise<void> {
+  const btn = elementRefs.usbBtn;
+  if (!state.activeInputs.length) {
+    showSaveFeedback("Нет данных роутинга пульта", "");
+    return;
+  }
+  btn.disabled = true;
+  try {
+    if (!usbSoundcheckActive) {
+      // Engage: capture the console state into list B, pre-fill list A with
+      // the USB patch and upload it to the console.
+      const usb = usbPatchMap();
+      if (!usb.size) {
+        showSaveFeedback("Нет входов, назначенных на USB (шаблон Reaper пуст)", "");
+        return;
+      }
+      usbSavedSet = seedSetFromConsole();
+      editSets.B = usbSavedSet;
+      const usbSet = buildUsbSet();
+      editSets.A = usbSet;
+      activeEditSet = "A";
+      updateAbButtons();
+      buildEditInputs(usbSet.inputs, usbSet.stereoPairs);
+      // Only the re-sourced channels need to be sent — the rest of the
+      // console already sits at its original routing.
+      await sendPatchesToConsole(usbSet.inputs.filter((p) => usb.has(p.destB3)));
+      usbSoundcheckActive = true;
+      btn.classList.add("active");
+      lastUploadedSet = "A";
+      updateActivePatchingTitle();
+      flashActivePatching("A");
+      showSaveFeedback("USB: входы переключены на USB", "✓ ");
+    } else {
+      // Release: send the captured routing back — every input returns to
+      // its original source.
+      const saved = usbSavedSet;
+      if (saved) await sendPatchesToConsole(saved.inputs);
+      usbSoundcheckActive = false;
+      usbSavedSet = null;
+      btn.classList.remove("active");
+      if (saved) {
+        lastUploadedSet = "B";
+        updateActivePatchingTitle();
+        flashActivePatching("B");
+        // Show the restored routing in the edit table (list B holds it), so
+        // the displayed list matches the console again.
+        activeEditSet = "B";
+        updateAbButtons();
+        buildEditInputs(saved.inputs, saved.stereoPairs);
+      }
+      showSaveFeedback("USB: исходный роутинг восстановлен", "✓ ");
+    }
+  } catch (err) {
+    showSaveFeedback(`USB: ошибка — ${(err && (err as Error).message) || String(err)}`, "");
+  } finally {
+    btn.disabled = false;
+    updateTransferButtons();
+  }
+}
+
 /** Explain why the transfer buttons are disabled via their tooltips. */
 function updateTransferTooltips(equal: boolean, stereoDiffers: boolean): void {
   if (elementRefs.downloadBtn) {
@@ -1209,6 +1328,10 @@ function inputsKey(inputs: SnapshotInput[]): string {
  * the tables are left as-is — no visible routing change, no rebuild.
  */
 export function onRoutingSnapshot(snapshot: SnapshotPayload): void {
+  // Output patches feed the USB soundcheck preset (same source the Reaper
+  // track template is built from) — keep them fresh even when the input
+  // routing itself is unchanged.
+  state.activeOutputs = snapshot.outputs || [];
   // Update stereo pairs FIRST so table merging uses fresh data.
   const pairsKey = JSON.stringify(snapshot.stereoPairs || []);
   const pairsChanged = pairsKey !== JSON.stringify(state.stereoPairs);
@@ -1257,7 +1380,11 @@ export function reset(): void {
   updateAbButtons();
   lastUploadedSet = null;
   updateActivePatchingTitle();
+  usbSoundcheckActive = false;
+  usbSavedSet = null;
+  elementRefs.usbBtn.classList.remove("active");
   state.activeInputs = [];
+  state.activeOutputs = [];
   state.channelStates = new Map();
   lastInputsKey = "";
   clearMeters();
@@ -1337,6 +1464,7 @@ elementRefs.downloadBtn.addEventListener("click", downloadInputPatching);
 elementRefs.abBtn.addEventListener("click", () => switchEditSet("A"));
 elementRefs.bBtn.addEventListener("click", () => switchEditSet("B"));
 elementRefs.abSwapBtn.addEventListener("click", swapRouting);
+elementRefs.usbBtn.addEventListener("click", toggleUsbSoundcheck);
 // Header "select all" checkbox of the Input Patching table.
 elementRefs.editSelAll.addEventListener("change", () => {
   const checked = elementRefs.editSelAll.checked;

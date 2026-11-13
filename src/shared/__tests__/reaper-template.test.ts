@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   buildReaperTracks,
   buildReaperTrackTemplate,
+  buildUsbSoundcheckPatch,
   USB_DEST,
 } from "../reaper-template";
 import type { SnapshotOutput, SnapshotPayload } from "../ipc";
@@ -45,8 +46,43 @@ describe("buildReaperTracks", () => {
       snap([out(1, "Input 1"), out(2, "Input 2")], [[0, 1]])
     );
     assert.deepEqual(tracks, [
-      { name: "Input 1-2", input: 0, channels: 2, output: 0, outputStereo: true },
+      {
+        name: "Input 1-2",
+        input: 0,
+        channels: 2,
+        output: 0,
+        outputStereo: true,
+        sourceInputs: [1, 2],
+      },
     ]);
+  });
+});
+
+describe("buildUsbSoundcheckPatch", () => {
+  it("patches mono inputs from their own USB channel", () => {
+    const patches = buildUsbSoundcheckPatch(snap([out(5, "Input 7")]));
+    assert.deepEqual(patches, [{ destB3: 6, usbChannel: 4 }]);
+  });
+
+  it("follows the template's relocated stereo pair (recorded 2-3, monitored 3-4)", () => {
+    // USB 1 is taken by a mono track, so the misaligned stereo pair recorded
+    // on USB 2-3 is relocated to the free pair 3-4 in the template — the
+    // soundcheck patch must follow the relocated playback channels.
+    const patches = buildUsbSoundcheckPatch(
+      snap([out(1, "Input 9"), out(2, "Input 1"), out(3, "Input 2")], [[0, 1]])
+    );
+    assert.deepEqual(patches, [
+      { destB3: 8, usbChannel: 0 },
+      { destB3: 0, usbChannel: 2 },
+      { destB3: 1, usbChannel: 3 },
+    ]);
+  });
+
+  it("skips non-input sources (mixes/FX/matrices have no input to patch)", () => {
+    const patches = buildUsbSoundcheckPatch(
+      snap([out(1, "Mix 1"), out(2, "Input 1"), out(3, "FX 1 L")])
+    );
+    assert.deepEqual(patches, [{ destB3: 0, usbChannel: 1 }]);
   });
 });
 
@@ -145,6 +181,7 @@ describe("buildReaperTrackTemplate routing", () => {
       channels: 2,
       output: 0,
       outputStereo: true,
+      sourceInputs: [2, 3],
     });
   });
 

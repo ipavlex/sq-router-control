@@ -2,7 +2,13 @@
  * Renderer-side type declarations: the `sq` bridge exposed by the preload
  * script, plus re-exports of the shared IPC payload types.
  */
-import type { ModelSpec, SnapshotInput, ChannelStateSnapshot, SqApi } from "../../shared/ipc";
+import type {
+  ModelSpec,
+  SnapshotInput,
+  SnapshotOutput,
+  ChannelStateSnapshot,
+  SqApi,
+} from "../../shared/ipc";
 
 declare global {
   interface Window {
@@ -85,6 +91,7 @@ export interface ElementRefs {
   abBtn: HTMLButtonElement;
   bBtn: HTMLButtonElement;
   abSwapBtn: HTMLButtonElement;
+  usbBtn: HTMLButtonElement;
   activePatchingTitle: HTMLElement;
   inputPatchingTitle: HTMLElement;
   syncScrollBtn: HTMLButtonElement;
@@ -118,6 +125,8 @@ export interface RendererState {
   groupCount: number | null;
   /** Last routing snapshot received from the console (Active Patching data). */
   activeInputs: SnapshotInput[];
+  /** Last output-patch snapshot received from the console (USB template data). */
+  activeOutputs: SnapshotOutput[];
   /** Channel state (fader/mute/gain/…) from snapshots, keyed by b3. */
   channelStates: Map<number, ChannelStateSnapshot>;
   /** Name of the console's currently-active scene (from snapshot), or null. */

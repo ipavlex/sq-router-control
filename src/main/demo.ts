@@ -107,6 +107,16 @@ const DEMO_VARIANTS: DemoVariant[] = [
       { kind: "fx", fxIndex: 0, lr: "R", dest: Dest.USB, destChannel0: 1 },
       { kind: "fx", fxIndex: 1, lr: "L", dest: Dest.USB, destChannel0: 2 },
       { kind: "fx", fxIndex: 1, lr: "R", dest: Dest.USB, destChannel0: 3 },
+      // Input sources → USB (virtual-soundcheck data for the USB button):
+      // monos, an aligned stereo pair and a misaligned pair on USB 10-11
+      // (the template relocates its playback to 11-12).
+      { kind: "output", sourceB3: 0, dest: Dest.USB, destChannel0: 4 }, // Kick → USB 5
+      { kind: "output", sourceB3: 1, dest: Dest.USB, destChannel0: 5 }, // Snare → USB 6
+      { kind: "output", sourceB3: 6, dest: Dest.USB, destChannel0: 6 }, // Gtr L → USB 7
+      { kind: "output", sourceB3: 7, dest: Dest.USB, destChannel0: 7 }, // Gtr R → USB 8
+      { kind: "output", sourceB3: 10, dest: Dest.USB, destChannel0: 8 }, // Vox → USB 9
+      { kind: "output", sourceB3: 14, dest: Dest.USB, destChannel0: 9 }, // Clk L → USB 10
+      { kind: "output", sourceB3: 15, dest: Dest.USB, destChannel0: 10 }, // Clk R → USB 11
       { kind: "output", sourceB3: 0x73, dest: Dest.Local, destChannel0: 7 }, // Matrix 1 L
       { kind: "output", sourceB3: 0x48, dest: Dest.Local, destChannel0: 9 }, // Group 1
       { kind: "monitor", source: 0, dest: Dest.Local, destChannel0: 6 },
@@ -168,6 +178,15 @@ const DEMO_VARIANTS: DemoVariant[] = [
       { kind: "fx", fxIndex: 0, lr: "R", dest: Dest.Local, destChannel0: 8 },
       { kind: "fx", fxIndex: 1, lr: "L", dest: Dest.USB, destChannel0: 4 },
       { kind: "fx", fxIndex: 1, lr: "R", dest: Dest.USB, destChannel0: 5 },
+      // Input sources → USB (virtual-soundcheck data for the USB button):
+      // monos, an aligned stereo pair and a misaligned pair on USB 10-11.
+      { kind: "output", sourceB3: 0, dest: Dest.USB, destChannel0: 1 }, // BD → USB 2
+      { kind: "output", sourceB3: 1, dest: Dest.USB, destChannel0: 2 }, // SD → USB 3
+      { kind: "output", sourceB3: 6, dest: Dest.USB, destChannel0: 6 }, // Pno L → USB 7
+      { kind: "output", sourceB3: 7, dest: Dest.USB, destChannel0: 7 }, // Pno R → USB 8
+      { kind: "output", sourceB3: 8, dest: Dest.USB, destChannel0: 8 }, // Org → USB 9
+      { kind: "output", sourceB3: 30, dest: Dest.USB, destChannel0: 9 }, // Rtn 2L → USB 10
+      { kind: "output", sourceB3: 31, dest: Dest.USB, destChannel0: 10 }, // Rtn 2R → USB 11
       { kind: "monitor", source: 1, dest: Dest.Local, destChannel0: 6 },
     ],
   },
@@ -214,6 +233,15 @@ const DEMO_VARIANTS: DemoVariant[] = [
       { kind: "output", sourceB3: 0x59, dest: Dest.USB, destChannel0: 1 },
       { kind: "output", sourceB3: 0x5a, dest: Dest.USB, destChannel0: 2 },
       { kind: "output", sourceB3: 0x5b, dest: Dest.USB, destChannel0: 3 },
+      // Input sources → USB (virtual-soundcheck data for the USB button):
+      // monos, an aligned stereo pair and a misaligned pair on USB 10-11.
+      { kind: "output", sourceB3: 0, dest: Dest.USB, destChannel0: 4 }, // Kick In → USB 5
+      { kind: "output", sourceB3: 20, dest: Dest.USB, destChannel0: 5 }, // Synth → USB 6
+      { kind: "output", sourceB3: 2, dest: Dest.USB, destChannel0: 6 }, // Snr Top → USB 7
+      { kind: "output", sourceB3: 3, dest: Dest.USB, destChannel0: 7 }, // Snr Bot → USB 8
+      { kind: "output", sourceB3: 18, dest: Dest.USB, destChannel0: 8 }, // Bass D → USB 9
+      { kind: "output", sourceB3: 32, dest: Dest.USB, destChannel0: 9 }, // Lap L → USB 10
+      { kind: "output", sourceB3: 33, dest: Dest.USB, destChannel0: 10 }, // Lap R → USB 11
       { kind: "output", sourceB3: 0x5c, dest: Dest.SLink, destChannel0: 0 },
       { kind: "output", sourceB3: 0x5d, dest: Dest.SLink, destChannel0: 1 },
       { kind: "output", sourceB3: 0x5e, dest: Dest.SLink, destChannel0: 2 },
@@ -498,6 +526,18 @@ export class DemoSession {
         this.applyFxPatch(0, "R", Dest.USB, 1);
         this.applyFxPatch(1, "L", Dest.USB, 2);
         this.applyFxPatch(1, "R", Dest.USB, 3);
+        // Input sources → USB: the virtual-soundcheck data the Routing tab's
+        // USB button builds its patch from (same source the Reaper track
+        // template is generated from). Mono inputs, an aligned stereo pair
+        // and a misaligned pair (recorded on USB 10-11 — the template
+        // relocates its playback to 11-12).
+        this.applyOutputPatch(0, Dest.USB, 4); // Input 1 (Kick) → USB 5
+        this.applyOutputPatch(1, Dest.USB, 5); // Input 2 (Snare) → USB 6
+        this.applyOutputPatch(6, Dest.USB, 6); // Input 7 (Gtr L) → USB 7
+        this.applyOutputPatch(7, Dest.USB, 7); // Input 8 (Gtr R) → USB 8
+        this.applyOutputPatch(10, Dest.USB, 8); // Input 11 (Vox) → USB 9
+        this.applyOutputPatch(14, Dest.USB, 9); // Input 15 (Clk L) → USB 10
+        this.applyOutputPatch(15, Dest.USB, 10); // Input 16 (Clk R) → USB 11
         this.applyMonitorPatch(0, Dest.Local, 6);
       },
       // Phase 5 — routing/config block + kick off live simulation.
