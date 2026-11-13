@@ -8,8 +8,12 @@
  *   [0x7F] [id:u8] [len:u16LE] [0x00 0x00] [body × len]
  *
  * The body is an array of u16 LE values. The interesting packet ids are:
- *   id=0x06  48 channels × 11 slots — per-channel bar data (inputs)
- *   id=0x17  48 values — one level per input channel
+ *   id=0x06  48 channels × 11 slots — per-channel bar data (inputs,
+ *            pre-fader level in slots 0/1 — the console-strip meter)
+ *   id=0x17  48 values — one POST-FADER level per input channel (≈ 0x06 +
+ *            fader position; fader at −∞ → floor). Verified against fader
+ *            values from ParamData on a live SQ-5, 2026-11-12: 0x17 showed
+ *            the floor while 0x06 still read −15.8 dB with the fader closed.
  *   id=0x18  40 buses × 6 slots — Main LR, Mix 1-12, FX sends (see BUS_*)
  *
  * Level encoding: dBFS ≈ (value - 0x8000) / 256, i.e. 0x8000 = 0.00 dBFS.
@@ -340,7 +344,11 @@ export function decodeMeterMessage(msg: Buffer): MetersPayload | null {
 function mergeMeters(): MetersPayload {
   const merged = emptyMeters();
   for (let ch = 0; ch < INPUT_CHANNELS; ch++) {
-    merged.inputs[ch] = single.inputs[ch] ?? detail.inputs[ch];
+    // 0x06 is the pre-fader channel meter (matches the console strip);
+    // 0x17 is post-fader — with faders pulled down it reads far below the
+    // strip or the floor, so it must never override 0x06. Kept as a
+    // fallback for sessions where no 0x06 packet has arrived yet.
+    merged.inputs[ch] = detail.inputs[ch] ?? single.inputs[ch];
     merged.clip[ch] = detail.clip[ch];
   }
   if (busMeters) {

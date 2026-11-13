@@ -207,12 +207,15 @@ interface SessionStats {
 }
 
 /** Connect (handshake includes the MeterSub UDP-port exchange) and wire the
- * meter events into per-shape stats. The caller disconnects when done. */
+ * meter events into per-shape stats. Hooks come from a factory so they can
+ * close over `stats`: meter events fire during the handshake, before this
+ * function returns (a closure over the caller's destructured `stats` would
+ * hit the TDZ). The caller disconnects when done. */
 async function openSession(
   host: string,
   port: number | undefined,
   timeoutMs: number,
-  hooks: SessionHooks
+  makeHooks: (stats: SessionStats) => SessionHooks
 ): Promise<{ conn: Connection; version: { modelName: string; fwA: number; fwB: number }; stats: SessionStats }> {
   const conn = new Connection({ host, port, connectTimeoutMs: timeoutMs });
   const stats: SessionStats = {
@@ -221,6 +224,7 @@ async function openSession(
     last: null,
     shapes: new Map(),
   };
+  const hooks = makeHooks(stats);
 
   conn.on("meterData", (msg: Buffer) => {
     stats.total++;
@@ -271,27 +275,29 @@ async function watch(
   everyMs: number,
   timeoutMs: number
 ): Promise<void> {
-  const { conn, version, stats } = await openSession(host, port, timeoutMs, {
-    onPacketInfo: (info) => {
-      const s = stats.shapes.get(`${info.id}:${info.len}`);
-      const first = !s || !s.logged;
-      if (s) s.logged = true;
-      if (info.decoded) {
-        if (first) console.log(`  shape id=${fmtId(info.id)} body=${info.len}B (decoded)`);
-      } else if (first || info.changes) {
-        const kind = s?.keepalive ? "keepalive" : "undecoded";
-        const bits = [
-          info.sample ? `dB ${info.sample}` : "",
-          info.hot ? `hot: ${info.hot}` : "",
-          info.changes ? `chg: ${info.changes}` : "",
-        ]
-          .filter(Boolean)
-          .join("  ");
-        console.log(
-          `  shape id=${fmtId(info.id)} body=${info.len}B (${kind})${bits ? `  ${bits}` : ""}`
-        );
-      }
-    },
+  const { conn, version, stats } = await openSession(host, port, timeoutMs, (stats) => {
+    return {
+      onPacketInfo: (info: MeterPacketInfo) => {
+        const s = stats.shapes.get(`${info.id}:${info.len}`);
+        const first = !s || !s.logged;
+        if (s) s.logged = true;
+        if (info.decoded) {
+          if (first) console.log(`  shape id=${fmtId(info.id)} body=${info.len}B (decoded)`);
+        } else if (first || info.changes) {
+          const kind = s?.keepalive ? "keepalive" : "undecoded";
+          const bits = [
+            info.sample ? `dB ${info.sample}` : "",
+            info.hot ? `hot: ${info.hot}` : "",
+            info.changes ? `chg: ${info.changes}` : "",
+          ]
+            .filter(Boolean)
+            .join("  ");
+          console.log(
+            `  shape id=${fmtId(info.id)} body=${info.len}B (${kind})${bits ? `  ${bits}` : ""}`
+          );
+        }
+      },
+    };
   });
   console.log(`connected: ${version.modelName} (fw ${version.fwA}.${version.fwB})`);
   console.log(
@@ -320,7 +326,7 @@ async function capture(
   durationMs: number,
   timeoutMs: number
 ): Promise<void> {
-  const { conn, version, stats } = await openSession(host, port, timeoutMs, {});
+  const { conn, version, stats } = await openSession(host, port, timeoutMs, () => ({}));
   console.log(`connected: ${version.modelName} (fw ${version.fwA}.${version.fwB})`);
   console.log(
     `udp local :${conn.localUdpPort} ← mixer announced :${conn.mixerMeterPort} — capturing ${durationMs} ms`

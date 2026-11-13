@@ -186,6 +186,27 @@ describe("decodeMeterMessage — id=0x18 (buses)", () => {
 });
 
 describe("decodeMeterMessage — merging and validation", () => {
+  it("prefers the pre-fader 0x06 level over the post-fader 0x17 tap", () => {
+    const single = fill(48, FLOOR);
+    single[0] = ZERO_DB - 512; // 0x17: −2 dB post-fader
+    decodeMeterMessage(meterMsg(0x17, single));
+    const detail = detailBody();
+    detail[0] = ZERO_DB - 256; // 0x06: −1 dB pre-fader
+    const m = decodeMeterMessage(meterMsg(0x06, detail));
+    assert.ok(m);
+    assert.equal(m.inputs[0], -1);
+  });
+
+  it("falls back to the 0x17 tap when 0x06 carries no reading", () => {
+    const single = fill(48, FLOOR);
+    single[1] = ZERO_DB - 512; // 0x17: −2 dB
+    decodeMeterMessage(meterMsg(0x17, single));
+    const detail = detailBody(); // all floor → null
+    const m = decodeMeterMessage(meterMsg(0x06, detail));
+    assert.ok(m);
+    assert.equal(m.inputs[1], -2);
+  });
+
   it("merges bus data into the input snapshot", () => {
     const single = fill(48, FLOOR);
     single[0] = ZERO_DB;
@@ -194,7 +215,7 @@ describe("decodeMeterMessage — merging and validation", () => {
     setBus(buses, 24, ZERO_DB - 256, FLOOR, FLOOR, FLOOR);
     const m = decodeMeterMessage(meterMsg(0x18, buses));
     assert.ok(m);
-    assert.equal(m.inputs[0], 0); // retained from the 0x17 read
+    assert.equal(m.inputs[0], 0); // 0x06 floor → falls back to the 0x17 read
     assert.equal(m.mixes?.[0], -1);
   });
 
