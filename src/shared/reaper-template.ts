@@ -16,6 +16,16 @@
  * In the RPP track chunk this is the second field of the `REC` line:
  *   REC <arm> <input> <recmode> ...
  *
+ * Each track also gets hardware output send(s) mirroring its record input
+ * (`HWOUT` line, encoding differs from I_RECINPUT — see hwoutLines) and the
+ * master/parent send is disabled (`MAINSEND 0`), so imported tracks monitor
+ * straight from their hardware outputs without feeding the master bus.
+ * Outputs are allocated in two passes: first mono tracks and aligned stereo
+ * tracks (1-based odd pair start) monitor from their own record channel(s);
+ * then misaligned stereo tracks take the first free odd-even pair of the 32
+ * USB channels — and when every pair is occupied, mono outputs are relocated
+ * minimally to open one up.
+ *
  * A track template contains only `<TRACK>…</TRACK>` blocks — no
  * `<REAPER_PROJECT>` wrapper (verified against REAPER-written templates).
  */
@@ -23,8 +33,21 @@ import type { SnapshotPayload } from "./ipc";
 
 /** Physical destination code for the USB output bus (OutputPatchDest.USB). */
 export const USB_DEST = 0x1d;
+/** Total USB channels of the SQ interface (16 odd-even stereo pairs). */
+export const USB_CHANNEL_COUNT = 32;
 /** REAPER I_RECINPUT flag marking a stereo input pair. */
 const STEREO_BIT = 1024;
+
+/**
+ * HWOUT destination encoding (hardware output send) — **different** from
+ * I_RECINPUT (ref: ReaTeam/Doc "State Chunk Definitions"):
+ *   mono output n (0-based)              → 1024 + n
+ *   stereo pair starting at output n     → n (REAPER only offers pairs whose
+ *     1-based start is odd, i.e. 0-based n must be even)
+ */
+const HWOUT_MONO_BIT = 1024;
+/** HWOUT source channel: mono source ch 1 (L) → 1024, ch 2 (R) → 1025. */
+const SRC_MONO_BIT = 1024;
 
 export interface ReaperTrack {
   /** Track name shown in REAPER. */
@@ -33,6 +56,15 @@ export interface ReaperTrack {
   input: number;
   /** 1 = mono, 2 = stereo pair starting at `input`. */
   channels: 1 | 2;
+  /**
+   * 0-based hardware output channel (pair start for stereo). Mono and aligned
+   * stereo tracks mirror their record input; misaligned stereo tracks take
+   * the first free odd-even pair (mono outputs are relocated minimally when
+   * none is free); null when no output could be allocated.
+   */
+  output: number | null;
+  /** True when `output` is a stereo pair start (only for channels: 2). */
+  outputStereo: boolean;
 }
 
 type SourceKind = "input" | "mix" | "fx" | "matrix" | "other";
@@ -136,7 +168,8 @@ function stereoName(snapshot: SnapshotPayload, a: Assign, b: Assign): string {
 
 /**
  * Map a routing snapshot to the list of Reaper tracks: only USB-assigned
- * channels, sorted by USB channel, with declared stereo pairs merged.
+ * channels, sorted by USB channel, with declared stereo pairs merged. Also
+ * allocates hardware outputs (see ReaperTrack.output).
  */
 export function buildReaperTracks(snapshot: SnapshotPayload): ReaperTrack[] {
   const assigns: Assign[] = (snapshot.outputs ?? [])
@@ -157,12 +190,133 @@ export function buildReaperTracks(snapshot: SnapshotPayload): ReaperTrack[] {
     const a = assigns[i];
     const b = assigns[i + 1];
     if (b && b.ch === a.ch + 1 && isStereoPair(snapshot, a, b)) {
-      tracks.push({ name: stereoName(snapshot, a, b), input: a.ch - 1, channels: 2 });
+      tracks.push({
+        name: stereoName(snapshot, a, b),
+        input: a.ch - 1,
+        channels: 2,
+        output: null,
+        outputStereo: true,
+      });
       i++; // consume the right side
     } else {
-      tracks.push({ name: a.name, input: a.ch - 1, channels: 1 });
+      tracks.push({
+        name: a.name,
+        input: a.ch - 1,
+        channels: 1,
+        output: null,
+        outputStereo: false,
+      });
     }
   }
+
+  // Output allocation over the 32 USB channels (16 odd-even pairs).
+  // Pass 1: mono tracks and aligned stereo tracks (1-based odd pair start)
+  // monitor from their own record channel(s). Pass 2: misaligned stereo
+  // tracks take the first free odd-even pair; when every pair is occupied,
+  // mono outputs are relocated minimally (fewest moved channels, then
+  // smallest total displacement) to open one up.
+  const used = new Array<boolean>(USB_CHANNEL_COUNT).fill(false);
+  /** Mono track holding an output on each occupied channel. */
+  const monoAt = new Map<number, ReaperTrack>();
+
+  const firstFreePair = (): number | null => {
+    for (let start = 0; start < USB_CHANNEL_COUNT; start += 2) {
+      if (!used[start] && !used[start + 1]) return start;
+    }
+    return null;
+  };
+
+  /** Cheapest way to open one odd-even pair by moving mono outputs. */
+  const findRelocation = ():
+    | { pair: number; moves: { track: ReaperTrack; from: number; to: number }[] }
+    | null => {
+    const free: number[] = [];
+    for (let c = 0; c < USB_CHANNEL_COUNT; c++) if (!used[c]) free.push(c);
+    let best:
+      | {
+          pair: number;
+          count: number;
+          disp: number;
+          moves: { track: ReaperTrack; from: number; to: number }[];
+        }
+      | null = null;
+    for (let start = 0; start < USB_CHANNEL_COUNT; start += 2) {
+      const channels = [start, start + 1];
+      // Only mono outputs can be moved; a pair touched by a stereo output
+      // (aligned or already relocated) is not a candidate.
+      const monos = channels
+        .filter((c) => monoAt.has(c))
+        .map((c) => ({ track: monoAt.get(c)!, from: c }));
+      if (!monos.length || channels.some((c) => used[c] && !monoAt.has(c))) continue;
+      // Destinations must lie outside the pair being freed.
+      const dests = free.filter((c) => c !== start && c !== start + 1);
+      if (dests.length < monos.length) continue;
+      let moves: { track: ReaperTrack; from: number; to: number }[] | null = null;
+      let disp = Infinity;
+      if (monos.length === 1) {
+        for (const to of dests) {
+          const d = Math.abs(to - monos[0].from);
+          if (d < disp) {
+            disp = d;
+            moves = [{ track: monos[0].track, from: monos[0].from, to }];
+          }
+        }
+      } else {
+        for (let i = 0; i < dests.length; i++) {
+          for (let j = 0; j < dests.length; j++) {
+            if (i === j) continue;
+            const d =
+              Math.abs(dests[i] - monos[0].from) + Math.abs(dests[j] - monos[1].from);
+            if (d < disp) {
+              disp = d;
+              moves = [
+                { track: monos[0].track, from: monos[0].from, to: dests[i] },
+                { track: monos[1].track, from: monos[1].from, to: dests[j] },
+              ];
+            }
+          }
+        }
+      }
+      const count = monos.length;
+      if (!best || count < best.count || (count === best.count && disp < best.disp)) {
+        best = { pair: start, count, disp, moves: moves! };
+      }
+    }
+    return best ? { pair: best.pair, moves: best.moves } : null;
+  };
+
+  // Pass 1.
+  for (const t of tracks) {
+    if (t.channels === 1) {
+      t.output = t.input;
+      used[t.input] = true;
+      monoAt.set(t.input, t);
+    } else if (t.input % 2 === 0) {
+      t.output = t.input;
+      used[t.input] = used[t.input + 1] = true;
+    }
+  }
+
+  // Pass 2.
+  for (const t of tracks) {
+    if (t.channels !== 2 || t.input % 2 === 0) continue;
+    let pair = firstFreePair();
+    if (pair === null) {
+      const relocation = findRelocation();
+      if (!relocation) continue; // no pair can be opened — no hardware output
+      for (const m of relocation.moves) {
+        used[m.from] = false;
+        used[m.to] = true;
+        monoAt.delete(m.from);
+        monoAt.set(m.to, m.track);
+        m.track.output = m.to;
+      }
+      pair = relocation.pair;
+    }
+    t.output = pair;
+    used[pair] = used[pair + 1] = true;
+  }
+
   return tracks;
 }
 
@@ -181,6 +335,21 @@ function newGuid(): string {
       return v.toString(16);
     })
     .toUpperCase();
+}
+
+/**
+ * Hardware output send mirroring the track's allocated output ("output =
+ * input" where REAPER allows it). Line layout per ReaTeam/Doc:
+ *   HWOUT <dest> <sendmode> <vol> <pan> <mute> <invert> <srcchan> -1:U <automode>
+ * (sendmode 0 = post-fader, vol 1 = 0 dB, srcchan 0 = stereo source ch 1-2,
+ * srcchan 1024 = mono source ch 1; `-1:U` is REAPER's own field 8).
+ * A track with `output: null` (no free stereo pair) gets no hardware send.
+ */
+function hwoutLines(t: ReaperTrack): string[] {
+  if (t.output === null) return [];
+  const dest = t.outputStereo ? t.output : HWOUT_MONO_BIT + t.output;
+  const srcchan = t.outputStereo ? 0 : SRC_MONO_BIT;
+  return [`  HWOUT ${dest} 0 1 0 0 0 ${srcchan} -1:U -1`];
 }
 
 /** Build one REAPER `<TRACK>` chunk armed to record from its hardware input. */
@@ -208,7 +377,8 @@ function trackBlock(t: ReaperTrack): string {
     `  TRACKID {${newGuid()}}`,
     "  PERF 0",
     "  MIDIOUT -1",
-    "  MAINSEND 1 0",
+    "  MAINSEND 0 0",
+    ...hwoutLines(t),
     ">",
   ].join("\n");
 }
